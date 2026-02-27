@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, proposals
+from app.routes import auth, proposals, wbs
 from app.db.session import AsyncSessionLocal
 from app.db.seed import seed_users
 
@@ -25,6 +25,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(proposals.router)
+app.include_router(wbs.router)
 
 
 @app.get("/health")
