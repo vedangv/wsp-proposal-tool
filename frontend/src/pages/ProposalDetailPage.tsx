@@ -4,6 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { proposalsApi } from "../api/proposals";
 import TabNav from "../components/tabs/TabNav";
 import WBSTab from "../components/tabs/WBSTab";
+import PricingTab from "../components/tabs/PricingTab";
+import PeopleTab from "../components/tabs/PeopleTab";
+import OverviewTab from "../components/tabs/OverviewTab";
 
 export default function ProposalDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,9 +42,9 @@ export default function ProposalDetailPage() {
 
       <div className="max-w-7xl mx-auto py-6 px-4">
         {activeTab === "wbs" && <WBSTab proposalId={id!} />}
-        {activeTab === "overview" && <PlaceholderTab label="Overview" sprint={3} />}
-        {activeTab === "pricing" && <PlaceholderTab label="Pricing Matrix" sprint={3} />}
-        {activeTab === "people" && <PlaceholderTab label="People" sprint={3} />}
+        {activeTab === "overview" && <OverviewTab proposalId={id!} />}
+        {activeTab === "pricing" && <PricingTab proposalId={id!} />}
+        {activeTab === "people" && <PeopleTab proposalId={id!} />}
         {activeTab === "schedule" && <PlaceholderTab label="Schedule / Gantt" sprint={4} />}
         {activeTab === "deliverables" && <PlaceholderTab label="Deliverables" sprint={5} />}
         {activeTab === "drawings" && <PlaceholderTab label="Drawing List" sprint={5} />}
