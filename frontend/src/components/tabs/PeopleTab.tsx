@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { peopleApi, Person } from "../../api/people";
+import { agentsApi, CVResult } from "../../api/agents";
+import CVCard from "../CVCard";
 
 interface Props { proposalId: string; }
+
+type FetchState = "idle" | "fetching" | "done" | "error";
 
 export default function PeopleTab({ proposalId }: Props) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Person>>({});
+  const [fetchState, setFetchState] = useState<FetchState>("idle");
+  const [cvResults, setCvResults] = useState<CVResult[]>([]);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: people = [], isLoading } = useQuery({
     queryKey: ["people", proposalId],
@@ -45,64 +53,178 @@ export default function PeopleTab({ proposalId }: Props) {
 
   const saveEdit = (id: string) => updateMutation.mutate({ id, data: editValues });
 
+  // Apply CV result → update person record then re-query
+  const applyCV = async (cv: CVResult, personId?: string) => {
+    const target = personId
+      ? people.find(p => p.id === personId)
+      : people.find(p =>
+          p.employee_name.toLowerCase().includes(cv.requested_name.toLowerCase()) ||
+          cv.employee_name.toLowerCase().includes(p.employee_name.toLowerCase().split(" ")[0])
+        );
+
+    if (target) {
+      await peopleApi.update(proposalId, target.id, {
+        employee_id: cv.employee_id,
+        role_on_project: cv.role_on_project,
+        years_experience: cv.years_experience,
+      });
+      qc.invalidateQueries({ queryKey: ["people", proposalId] });
+    }
+    setDismissed(d => new Set(d).add(cv.employee_id));
+  };
+
+  const dismissCV = (employeeId: string) =>
+    setDismissed(d => new Set(d).add(employeeId));
+
+  const handleFetchCVs = async () => {
+    const names = people.map(p => p.employee_name).filter(Boolean);
+    if (names.length === 0) return;
+
+    setFetchState("fetching");
+    setCvResults([]);
+    setDismissed(new Set());
+
+    try {
+      const { job_id } = await agentsApi.startCVFetch(proposalId, names);
+
+      pollRef.current = setInterval(async () => {
+        const job = await agentsApi.pollJob(job_id);
+        if (job.status === "complete" && job.result) {
+          clearInterval(pollRef.current!);
+          setCvResults(job.result);
+          setFetchState("done");
+        } else if (job.status === "error") {
+          clearInterval(pollRef.current!);
+          setFetchState("error");
+        }
+      }, 800);
+    } catch {
+      setFetchState("error");
+    }
+  };
+
+  // Cleanup poll on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  const visibleResults = cvResults.filter(cv => !dismissed.has(cv.employee_id));
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold text-gray-800">Proposed Team</h3>
-        <div className="flex gap-2">
+      {/* Header */}
+      <div className="flex justify-between items-end mb-5">
+        <div>
+          <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">
+            Proposed Team
+          </h3>
+          <p className="text-xs text-wsp-muted font-body mt-0.5">
+            {people.length} team member{people.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="flex gap-2 items-center">
+          {fetchState === "error" && (
+            <span className="text-xs text-wsp-red font-body">Fetch failed — try again</span>
+          )}
           <button
-            disabled
-            title="CV-fetcher agent coming in Sprint 7"
-            className="bg-gray-100 text-gray-400 px-3 py-1.5 rounded text-sm cursor-not-allowed border border-gray-200"
-          >Fetch CVs (coming soon)</button>
-          <button
-            onClick={() => createMutation.mutate()}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
-          >+ Add Person</button>
+            onClick={handleFetchCVs}
+            disabled={fetchState === "fetching" || people.length === 0}
+            className={`wsp-btn-primary disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2
+              ${fetchState === "fetching" ? "animate-pulse" : ""}`}
+          >
+            {fetchState === "fetching" ? (
+              <>
+                <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Fetching CVs…
+              </>
+            ) : "Fetch CVs"}
+          </button>
+          <button onClick={() => createMutation.mutate()} className="wsp-btn-ghost">
+            + Add Person
+          </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+      {/* CV results panel */}
+      {fetchState !== "idle" && visibleResults.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted">
+              CV Results — {visibleResults.length} match{visibleResults.length !== 1 ? "es" : ""}
+            </p>
+            <button
+              onClick={() => { setFetchState("idle"); setCvResults([]); setDismissed(new Set()); }}
+              className="text-xs text-wsp-muted hover:text-wsp-dark font-body"
+            >
+              Clear all
+            </button>
+          </div>
+          <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+            {visibleResults.map(cv => (
+              <CVCard
+                key={cv.employee_id}
+                cv={cv}
+                onApply={cv => applyCV(cv)}
+                onDismiss={() => dismissCV(cv.employee_id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fetchState === "fetching" && cvResults.length === 0 && (
+        <div className="wsp-card p-6 mb-6 flex items-center gap-3">
+          <span className="w-4 h-4 border-2 border-wsp-border border-t-wsp-red rounded-full animate-spin" />
+          <span className="text-sm text-wsp-muted font-body">
+            Searching HR system for CVs…
+          </span>
+        </div>
+      )}
+
+      {/* People table */}
+      <div className="wsp-card overflow-hidden">
+        <table className="wsp-table w-full">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">Name</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium w-32">Employee ID</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">Role on Project</th>
-              <th className="text-right px-4 py-3 text-gray-600 font-medium w-28">Exp (yrs)</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium w-28">CV</th>
+              <th>Name</th>
+              <th className="w-32">Employee ID</th>
+              <th>Role on Project</th>
+              <th className="text-right w-28">Exp (yrs)</th>
+              <th className="w-24">CV</th>
               <th className="w-20"></th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody>
             {people.map(person => (
-              <tr key={person.id} className="hover:bg-gray-50">
+              <tr key={person.id}>
                 {editingId === person.id ? (
                   <>
-                    <td className="px-2 py-1"><input className="border rounded px-2 py-1 w-full text-sm" value={editValues.employee_name || ""} onChange={e => setEditValues(v => ({ ...v, employee_name: e.target.value }))} /></td>
-                    <td className="px-2 py-1"><input className="border rounded px-2 py-1 w-full text-sm" value={editValues.employee_id || ""} onChange={e => setEditValues(v => ({ ...v, employee_id: e.target.value }))} /></td>
-                    <td className="px-2 py-1"><input className="border rounded px-2 py-1 w-full text-sm" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
-                    <td className="px-2 py-1"><input type="number" className="border rounded px-2 py-1 w-full text-sm text-right" value={editValues.years_experience ?? ""} onChange={e => setEditValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} /></td>
-                    <td className="px-2 py-1 text-xs text-gray-400">{person.cv_path ? "✓ on file" : "—"}</td>
-                    <td className="px-2 py-1 flex gap-1">
-                      <button onClick={() => saveEdit(person.id)} className="text-green-600 hover:text-green-800 text-xs px-2 py-1 border border-green-300 rounded">Save</button>
-                      <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1 border rounded">✕</button>
+                    <td><input className="wsp-input w-full" value={editValues.employee_name || ""} onChange={e => setEditValues(v => ({ ...v, employee_name: e.target.value }))} /></td>
+                    <td><input className="wsp-input w-full font-mono text-xs" value={editValues.employee_id || ""} onChange={e => setEditValues(v => ({ ...v, employee_id: e.target.value }))} /></td>
+                    <td><input className="wsp-input w-full" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
+                    <td><input type="number" className="wsp-input w-full text-right" value={editValues.years_experience ?? ""} onChange={e => setEditValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} /></td>
+                    <td className="text-xs text-wsp-muted">{person.cv_path ? "✓ on file" : "—"}</td>
+                    <td>
+                      <div className="flex gap-1 px-2">
+                        <button onClick={() => saveEdit(person.id)} className="text-green-700 text-xs px-2 py-1 border border-green-300 hover:bg-green-50">Save</button>
+                        <button onClick={() => setEditingId(null)} className="text-wsp-muted text-xs px-2 py-1 border border-wsp-border">✕</button>
+                      </div>
                     </td>
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 font-medium">{person.employee_name}</td>
-                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{person.employee_id || "—"}</td>
-                    <td className="px-4 py-3">{person.role_on_project || "—"}</td>
-                    <td className="px-4 py-3 text-right">{person.years_experience ?? "—"}</td>
-                    <td className="px-4 py-3 text-xs">
+                    <td className="font-medium text-wsp-dark">{person.employee_name}</td>
+                    <td className="font-mono text-wsp-red text-xs">{person.employee_id || "—"}</td>
+                    <td className="text-wsp-muted">{person.role_on_project || "—"}</td>
+                    <td className="text-right font-mono text-sm">{person.years_experience ?? "—"}</td>
+                    <td className="text-xs">
                       {person.cv_path
-                        ? <span className="text-green-600">✓ on file</span>
-                        : <span className="text-gray-400">—</span>}
+                        ? <span className="text-emerald-600 font-display tracking-wide text-[10px] uppercase">✓ on file</span>
+                        : <span className="text-wsp-border">—</span>}
                     </td>
-                    <td className="px-4 py-3 flex gap-2">
-                      <button onClick={() => startEdit(person)} className="text-gray-400 hover:text-gray-700 text-xs">Edit</button>
-                      <button onClick={() => deleteMutation.mutate(person.id)} className="text-red-400 hover:text-red-600 text-xs">Del</button>
+                    <td>
+                      <div className="flex gap-2 px-4">
+                        <button onClick={() => startEdit(person)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
+                        <button onClick={() => deleteMutation.mutate(person.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                      </div>
                     </td>
                   </>
                 )}
@@ -111,7 +233,9 @@ export default function PeopleTab({ proposalId }: Props) {
           </tbody>
         </table>
         {people.length === 0 && !isLoading && (
-          <p className="text-center py-10 text-gray-400 text-sm">No team members yet. Add one.</p>
+          <p className="text-center py-12 text-wsp-muted text-sm font-body">
+            No team members yet. Add one or use Fetch CVs.
+          </p>
         )}
       </div>
     </div>

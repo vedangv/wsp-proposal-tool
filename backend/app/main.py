@@ -2,7 +2,7 @@ import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, proposals, wbs, pricing, people, scope, schedule, deliverables, drawings
+from app.routes import auth, proposals, wbs, pricing, people, scope, schedule, deliverables, drawings, agents
 from app.db.session import AsyncSessionLocal
 from app.db.seed import seed_users
 from app.websockets.manager import manager
@@ -35,6 +35,7 @@ app.include_router(scope.router)
 app.include_router(schedule.router)
 app.include_router(deliverables.router)
 app.include_router(drawings.router)
+app.include_router(agents.router)
 
 
 @app.websocket("/ws/proposals/{proposal_id}")
