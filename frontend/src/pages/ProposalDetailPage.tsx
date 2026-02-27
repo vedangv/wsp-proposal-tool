@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { proposalsApi } from "../api/proposals";
@@ -9,6 +9,8 @@ import PeopleTab from "../components/tabs/PeopleTab";
 import OverviewTab from "../components/tabs/OverviewTab";
 import ScheduleTab from "../components/tabs/ScheduleTab";
 import DeliverablesTab from "../components/tabs/DeliverablesTab";
+import DrawingsTab from "../components/tabs/DrawingsTab";
+import { useProposalSocket, Presence } from "../hooks/useProposalSocket";
 
 const STATUS_STYLES: Record<string, string> = {
   draft:     "bg-wsp-bg-soft text-wsp-muted",
@@ -22,6 +24,11 @@ export default function ProposalDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("wbs");
+  const [presence, setPresence] = useState<Presence>({});
+
+  const onPresence = useCallback((p: Presence) => setPresence(p), []);
+
+  useProposalSocket({ proposalId: id!, activeTab, onPresence });
 
   const { data: proposal, isLoading } = useQuery({
     queryKey: ["proposal", id],
@@ -75,12 +82,21 @@ export default function ProposalDetailPage() {
               <span className={`wsp-badge ${STATUS_STYLES[proposal.status] || "bg-wsp-bg-soft text-wsp-muted"}`}>
                 {proposal.status}
               </span>
+              {/* Live user count */}
+              {Object.values(presence).flat().length > 0 && (
+                <div className="flex items-center gap-1.5 border-l border-white/10 pl-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-white/40 text-xs font-mono">
+                    {Object.values(presence).flat().length} online
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </header>
 
-      <TabNav activeTab={activeTab} onChange={setActiveTab} />
+      <TabNav activeTab={activeTab} onChange={setActiveTab} presence={presence} />
 
       <div className="max-w-7xl mx-auto py-6 px-6">
         {activeTab === "wbs"          && <WBSTab proposalId={id!} />}
@@ -89,17 +105,8 @@ export default function ProposalDetailPage() {
         {activeTab === "people"       && <PeopleTab proposalId={id!} />}
         {activeTab === "schedule"     && <ScheduleTab proposalId={id!} />}
         {activeTab === "deliverables" && <DeliverablesTab proposalId={id!} />}
-        {activeTab === "drawings"     && <PlaceholderTab label="Drawing List" sprint={5} />}
+        {activeTab === "drawings"     && <DrawingsTab proposalId={id!} />}
       </div>
-    </div>
-  );
-}
-
-function PlaceholderTab({ label, sprint }: { label: string; sprint: number }) {
-  return (
-    <div className="py-16 text-center">
-      <p className="text-wsp-muted text-sm font-body">{label}</p>
-      <p className="text-wsp-border text-xs font-mono mt-1">Sprint {sprint}</p>
     </div>
   );
 }
