@@ -7,6 +7,16 @@ import WBSTab from "../components/tabs/WBSTab";
 import PricingTab from "../components/tabs/PricingTab";
 import PeopleTab from "../components/tabs/PeopleTab";
 import OverviewTab from "../components/tabs/OverviewTab";
+import ScheduleTab from "../components/tabs/ScheduleTab";
+import DeliverablesTab from "../components/tabs/DeliverablesTab";
+
+const STATUS_STYLES: Record<string, string> = {
+  draft:     "bg-wsp-bg-soft text-wsp-muted",
+  active:    "bg-green-50 text-green-700",
+  submitted: "bg-blue-50 text-blue-700",
+  won:       "bg-emerald-50 text-emerald-700",
+  lost:      "bg-red-50 text-wsp-red",
+};
 
 export default function ProposalDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,35 +29,67 @@ export default function ProposalDetailPage() {
     enabled: !!id,
   });
 
-  if (isLoading) return <div className="p-8 text-gray-400">Loading...</div>;
-  if (!proposal) return <div className="p-8 text-red-500">Proposal not found</div>;
+  if (isLoading) return (
+    <div className="min-h-screen bg-wsp-bg-soft flex items-center justify-center">
+      <span className="text-wsp-muted font-body text-sm tracking-wide">Loading proposal…</span>
+    </div>
+  );
+  if (!proposal) return (
+    <div className="min-h-screen bg-wsp-bg-soft flex items-center justify-center">
+      <span className="text-wsp-red font-body text-sm">Proposal not found.</span>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-6 py-4 flex items-center gap-4">
-        <button
-          onClick={() => navigate("/proposals")}
-          className="text-gray-400 hover:text-gray-700 text-sm"
-        >← Back</button>
-        <div>
-          <span className="font-mono text-blue-600 text-sm">{proposal.proposal_number}</span>
-          <h1 className="text-lg font-bold text-gray-800">{proposal.title}</h1>
+    <div className="min-h-screen bg-wsp-bg-soft">
+      {/* Top bar */}
+      <header className="bg-wsp-dark">
+        <div className="max-w-7xl mx-auto px-6 py-0 flex items-stretch gap-0">
+          {/* WSP logo area */}
+          <div className="flex items-center pr-6 border-r border-white/10">
+            <span className="font-display font-bold text-white text-xl tracking-widest uppercase">WSP</span>
+          </div>
+
+          {/* Back + proposal identity */}
+          <div className="flex items-center gap-4 px-6 flex-1 py-4">
+            <button
+              onClick={() => navigate("/proposals")}
+              className="text-white/50 hover:text-white text-xs font-display tracking-widest uppercase
+                         transition-colors flex items-center gap-1.5"
+            >
+              ← Proposals
+            </button>
+            <span className="text-white/20">/</span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-wsp-red text-sm tracking-wider">
+                {proposal.proposal_number}
+              </span>
+              <h1 className="font-display font-semibold text-white text-base tracking-wide">
+                {proposal.title}
+              </h1>
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              {proposal.client_name && (
+                <span className="text-white/60 text-sm font-body">{proposal.client_name}</span>
+              )}
+              <span className={`wsp-badge ${STATUS_STYLES[proposal.status] || "bg-wsp-bg-soft text-wsp-muted"}`}>
+                {proposal.status}
+              </span>
+            </div>
+          </div>
         </div>
-        {proposal.client_name && (
-          <span className="text-sm text-gray-500 ml-auto">{proposal.client_name}</span>
-        )}
       </header>
 
       <TabNav activeTab={activeTab} onChange={setActiveTab} />
 
-      <div className="max-w-7xl mx-auto py-6 px-4">
-        {activeTab === "wbs" && <WBSTab proposalId={id!} />}
-        {activeTab === "overview" && <OverviewTab proposalId={id!} />}
-        {activeTab === "pricing" && <PricingTab proposalId={id!} />}
-        {activeTab === "people" && <PeopleTab proposalId={id!} />}
-        {activeTab === "schedule" && <PlaceholderTab label="Schedule / Gantt" sprint={4} />}
-        {activeTab === "deliverables" && <PlaceholderTab label="Deliverables" sprint={5} />}
-        {activeTab === "drawings" && <PlaceholderTab label="Drawing List" sprint={5} />}
+      <div className="max-w-7xl mx-auto py-6 px-6">
+        {activeTab === "wbs"          && <WBSTab proposalId={id!} />}
+        {activeTab === "overview"     && <OverviewTab proposalId={id!} />}
+        {activeTab === "pricing"      && <PricingTab proposalId={id!} />}
+        {activeTab === "people"       && <PeopleTab proposalId={id!} />}
+        {activeTab === "schedule"     && <ScheduleTab proposalId={id!} />}
+        {activeTab === "deliverables" && <DeliverablesTab proposalId={id!} />}
+        {activeTab === "drawings"     && <PlaceholderTab label="Drawing List" sprint={5} />}
       </div>
     </div>
   );
@@ -55,8 +97,9 @@ export default function ProposalDetailPage() {
 
 function PlaceholderTab({ label, sprint }: { label: string; sprint: number }) {
   return (
-    <div className="text-gray-400 text-sm py-8 text-center">
-      {label} — coming in Sprint {sprint}
+    <div className="py-16 text-center">
+      <p className="text-wsp-muted text-sm font-body">{label}</p>
+      <p className="text-wsp-border text-xs font-mono mt-1">Sprint {sprint}</p>
     </div>
   );
 }

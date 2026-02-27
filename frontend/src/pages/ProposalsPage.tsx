@@ -4,10 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { proposalsApi } from "../api/proposals";
 import { useAuth } from "../context/AuthContext";
 
-const STATUS_COLORS = {
-  draft: "bg-gray-100 text-gray-700",
-  in_review: "bg-yellow-100 text-yellow-700",
-  submitted: "bg-green-100 text-green-700",
+const STATUS_STYLES: Record<string, string> = {
+  draft:     "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
+  active:    "bg-green-50 text-green-700 border border-green-200",
+  submitted: "bg-blue-50 text-blue-700 border border-blue-200",
+  won:       "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  lost:      "bg-red-50 text-wsp-red border border-red-200",
 };
 
 export default function ProposalsPage() {
@@ -24,67 +26,164 @@ export default function ProposalsPage() {
 
   const createMutation = useMutation({
     mutationFn: proposalsApi.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["proposals"] }); setShowForm(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["proposals"] });
+      setShowForm(false);
+      setForm({ proposal_number: "", title: "", client_name: "" });
+    },
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold text-blue-700">WSP Proposal Tool</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">{user?.name}</span>
-          <button onClick={logout} className="text-sm text-gray-500 hover:text-gray-800">Sign out</button>
+    <div className="min-h-screen bg-wsp-bg-soft">
+      {/* Header */}
+      <header className="bg-wsp-dark border-b border-white/10">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <span className="font-display font-bold text-white text-xl tracking-[0.3em] uppercase">WSP</span>
+            <span className="text-white/20 text-lg">|</span>
+            <span className="font-display text-white/70 text-sm tracking-widest uppercase font-medium">
+              Proposal Tool
+            </span>
+          </div>
+          <div className="flex items-center gap-5">
+            <span className="text-white/50 text-sm font-body">{user?.name}</span>
+            <button
+              onClick={logout}
+              className="text-white/40 hover:text-white text-xs font-display tracking-widest uppercase transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto py-8 px-4">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold text-gray-800">Proposals</h2>
+      <main className="max-w-6xl mx-auto py-8 px-6">
+        {/* Page title row */}
+        <div className="flex justify-between items-end mb-6">
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-wsp-dark tracking-tight">Proposals</h2>
+            <p className="text-wsp-muted text-sm font-body mt-0.5">
+              {proposals.length} proposal{proposals.length !== 1 ? "s" : ""}
+            </p>
+          </div>
           <button
-            onClick={() => setShowForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-          >+ New Proposal</button>
+            onClick={() => setShowForm(v => !v)}
+            className="wsp-btn-primary"
+          >
+            + New Proposal
+          </button>
         </div>
 
+        {/* Create form */}
         {showForm && (
-          <div className="bg-white border rounded-lg p-4 mb-4 grid grid-cols-3 gap-3">
-            <input className="border rounded px-3 py-1.5 text-sm" placeholder="Proposal #" value={form.proposal_number} onChange={e => setForm(f => ({...f, proposal_number: e.target.value}))} />
-            <input className="border rounded px-3 py-1.5 text-sm" placeholder="Title" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} />
-            <input className="border rounded px-3 py-1.5 text-sm" placeholder="Client Name" value={form.client_name} onChange={e => setForm(f => ({...f, client_name: e.target.value}))} />
-            <div className="col-span-3 flex gap-2">
-              <button onClick={() => createMutation.mutate({ ...form, status: "draft" })} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm">Create</button>
-              <button onClick={() => setShowForm(false)} className="border px-4 py-1.5 rounded text-sm">Cancel</button>
+          <div className="wsp-card p-5 mb-5">
+            <h3 className="font-display font-semibold text-wsp-dark text-sm tracking-widest uppercase mb-4">
+              New Proposal
+            </h3>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div>
+                <label className="block text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted mb-1.5">
+                  Proposal #
+                </label>
+                <input
+                  className="wsp-input w-full font-mono"
+                  placeholder="e.g. WSP-2026-001"
+                  value={form.proposal_number}
+                  onChange={e => setForm(f => ({ ...f, proposal_number: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted mb-1.5">
+                  Title
+                </label>
+                <input
+                  className="wsp-input w-full"
+                  placeholder="Project title"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted mb-1.5">
+                  Client
+                </label>
+                <input
+                  className="wsp-input w-full"
+                  placeholder="Client name"
+                  value={form.client_name}
+                  onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => createMutation.mutate({ ...form, status: "draft" })}
+                disabled={!form.proposal_number || !form.title}
+                className="wsp-btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Create Proposal
+              </button>
+              <button onClick={() => setShowForm(false)} className="wsp-btn-ghost">
+                Cancel
+              </button>
             </div>
           </div>
         )}
 
+        {/* Table */}
         {isLoading ? (
-          <p className="text-gray-500 text-sm">Loading...</p>
+          <p className="text-wsp-muted text-sm font-body py-8">Loading…</p>
         ) : (
-          <div className="bg-white rounded-lg border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
+          <div className="wsp-card overflow-hidden">
+            <table className="wsp-table w-full">
+              <thead>
                 <tr>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Proposal #</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Title</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Client</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Updated</th>
+                  <th>Proposal #</th>
+                  <th>Title</th>
+                  <th>Client</th>
+                  <th>Status</th>
+                  <th className="text-right">Updated</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {proposals.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/proposals/${p.id}`)}>
-                    <td className="px-4 py-3 font-mono text-blue-600">{p.proposal_number}</td>
-                    <td className="px-4 py-3">{p.title}</td>
-                    <td className="px-4 py-3 text-gray-500">{p.client_name || "—"}</td>
-                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>{p.status}</span></td>
-                    <td className="px-4 py-3 text-gray-400">{new Date(p.updated_at).toLocaleDateString()}</td>
+                  <tr
+                    key={p.id}
+                    className="cursor-pointer group"
+                    onClick={() => navigate(`/proposals/${p.id}`)}
+                  >
+                    <td>
+                      <span className="font-mono text-wsp-red text-xs tracking-wider group-hover:underline">
+                        {p.proposal_number}
+                      </span>
+                    </td>
+                    <td className="font-body text-wsp-dark font-medium">{p.title}</td>
+                    <td className="text-wsp-muted">{p.client_name || "—"}</td>
+                    <td>
+                      <span className={`wsp-badge ${STATUS_STYLES[p.status] || STATUS_STYLES.draft}`}>
+                        {p.status}
+                      </span>
+                    </td>
+                    <td className="text-right text-wsp-muted font-mono text-xs">
+                      {new Date(p.updated_at).toLocaleDateString("en-AU", {
+                        day: "2-digit", month: "short", year: "numeric",
+                      })}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {proposals.length === 0 && <p className="text-center py-12 text-gray-400">No proposals yet. Create one.</p>}
+            {proposals.length === 0 && (
+              <div className="py-16 text-center">
+                <p className="text-wsp-muted text-sm font-body">No proposals yet.</p>
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="mt-3 text-wsp-red text-sm font-display tracking-wide hover:underline"
+                >
+                  Create your first proposal →
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
