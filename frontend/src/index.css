@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Barlow', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: #f5f4f2;
+    color: #313131;
+  }
+
+  /* Thin scrollbars throughout */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d8d8d8; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #767676; }
+}
+
+@layer components {
+  .wsp-btn-primary {
+    @apply bg-wsp-red text-white px-4 py-2 text-sm font-display font-semibold tracking-wide
+           hover:bg-wsp-red-dark transition-colors duration-150 uppercase;
+  }
+
+  .wsp-btn-ghost {
+    @apply border border-wsp-border text-wsp-mid px-4 py-2 text-sm font-body
+           hover:border-wsp-dark hover:text-wsp-dark transition-colors duration-150;
+  }
+
+  .wsp-card {
+    @apply bg-white border border-wsp-border;
+  }
+
+  .wsp-table th {
+    @apply text-left px-4 py-2.5 text-xs font-display font-semibold tracking-wider
+           uppercase text-wsp-muted bg-wsp-bg-soft border-b border-wsp-border;
+  }
+
+  .wsp-table td {
+    @apply px-4 py-2.5 text-sm border-b border-wsp-border/50;
+  }
+
+  .wsp-table tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .wsp-table tbody tr:hover td {
+    @apply bg-wsp-bg-card;
+  }
+
+  .wsp-input {
+    @apply border border-wsp-border bg-white px-2.5 py-1.5 text-sm text-wsp-dark
+           focus:outline-none focus:border-wsp-red focus:ring-1 focus:ring-wsp-red/20
+           transition-colors;
+  }
+
+  .wsp-tab-active {
+    @apply border-b-2 border-wsp-red text-wsp-red font-semibold;
+  }
+
+  .wsp-tab-inactive {
+    @apply border-b-2 border-transparent text-wsp-muted hover:text-wsp-dark
+           hover:border-wsp-border transition-colors;
+  }
+
+  .wsp-badge {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-display font-semibold
+           tracking-wide uppercase;
+  }
+}
