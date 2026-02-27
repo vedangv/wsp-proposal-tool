@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://wsp:wsp@localhost:5432/wsp_proposals"
+    database_url: str = "postgresql+asyncpg://wsp:wsp@localhost:5433/wsp_proposals"
     secret_key: str = "dev-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480
