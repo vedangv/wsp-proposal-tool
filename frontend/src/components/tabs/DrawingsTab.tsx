@@ -29,7 +29,6 @@ export default function DrawingsTab({ proposalId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Drawing>>({});
   const [filterDiscipline, setFilterDiscipline] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
 
   const { data: drawings = [], isLoading } = useQuery({
     queryKey: ["drawings", proposalId],
@@ -101,28 +100,14 @@ export default function DrawingsTab({ proposalId }: Props) {
   };
 
   const filtered = drawings.filter(d =>
-    (!filterDiscipline || d.discipline === filterDiscipline) &&
-    (!filterStatus || d.status === filterStatus)
-  );
-
-  const byStatus = Object.fromEntries(
-    STATUSES.map(s => [s, drawings.filter(d => d.status === s).length])
+    (!filterDiscipline || d.discipline === filterDiscipline)
   );
 
   return (
     <div>
       {/* Header */}
       <div className="flex items-end justify-between mb-5">
-        <div>
-          <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Drawing List</h3>
-          <div className="flex gap-3 mt-1">
-            {STATUSES.map(s => (
-              <span key={s} className={`wsp-badge ${STATUS_STYLES[s]} text-[10px]`}>
-                {STATUS_LABELS[s]} · {byStatus[s] ?? 0}
-              </span>
-            ))}
-          </div>
-        </div>
+        <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Drawing List</h3>
         <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
           + Add Drawing
         </button>
@@ -138,17 +123,9 @@ export default function DrawingsTab({ proposalId }: Props) {
           <option value="">All Disciplines</option>
           {DISCIPLINES.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <select
-          className="wsp-input text-xs"
-          value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value)}
-        >
-          <option value="">All Statuses</option>
-          {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-        </select>
-        {(filterDiscipline || filterStatus) && (
+        {filterDiscipline && (
           <button
-            onClick={() => { setFilterDiscipline(""); setFilterStatus(""); }}
+            onClick={() => setFilterDiscipline("")}
             className="text-xs text-wsp-red hover:underline font-body"
           >
             Clear filters

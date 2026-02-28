@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<DeliverableStatus, string> = {
 };
 
 const DELIVERABLE_TYPES: DeliverableType[] = ["report", "model", "specification", "drawing_package", "other"];
-const STATUSES: DeliverableStatus[] = ["tbd", "in_progress", "complete"];
+const STATUSES: DeliverableStatus[] = ["tbd", "in_progress", "complete"]; // used in edit form
 
 export default function DeliverablesTab({ proposalId }: Props) {
   const qc = useQueryClient();
@@ -85,26 +85,11 @@ export default function DeliverablesTab({ proposalId }: Props) {
     return item ? item.wbs_code : id.slice(0, 6);
   };
 
-  const statusCounts = {
-    tbd:         deliverables.filter(d => d.status === "tbd").length,
-    in_progress: deliverables.filter(d => d.status === "in_progress").length,
-    complete:    deliverables.filter(d => d.status === "complete").length,
-  };
-
   return (
     <div>
-      {/* Header + stats */}
+      {/* Header */}
       <div className="flex items-end justify-between mb-5">
-        <div>
-          <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Deliverables</h3>
-          <div className="flex gap-4 mt-1">
-            {STATUSES.map(s => (
-              <span key={s} className={`wsp-badge ${STATUS_STYLES[s]} text-[10px]`}>
-                {STATUS_LABELS[s]} · {statusCounts[s]}
-              </span>
-            ))}
-          </div>
-        </div>
+        <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Deliverables</h3>
         <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
           + Add Deliverable
         </button>
