@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { wbsApi, WBSItem } from "../../api/wbs";
+import { wbsApi, type WBSItem } from "../../api/wbs";
+
+const fmt = (n: number) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
+
+// WBS level derived from dot-count: "1" → 1, "1.0" → 2, "1.1.1" → 3
+const wbsLevel = (code: string) => code.split(".").length;
 
 interface Props { proposalId: string; }
 
@@ -118,7 +123,7 @@ export default function WBSTab({ proposalId }: Props) {
                     <td><input className="wsp-input w-full text-right" type="number" value={editValues.hours ?? 0} onChange={e => setEditValues(v => ({ ...v, hours: parseFloat(e.target.value) || 0 }))} /></td>
                     <td><input className="wsp-input w-full text-right" type="number" value={editValues.unit_rate ?? 0} onChange={e => setEditValues(v => ({ ...v, unit_rate: parseFloat(e.target.value) || 0 }))} /></td>
                     <td className="text-right text-wsp-muted text-xs font-mono px-4">
-                      ${((editValues.hours ?? 0) * (editValues.unit_rate ?? 0)).toLocaleString()}
+                      {fmt((editValues.hours ?? 0) * (editValues.unit_rate ?? 0))}
                     </td>
                     <td>
                       <div className="flex gap-1 px-2">
@@ -129,12 +134,28 @@ export default function WBSTab({ proposalId }: Props) {
                   </>
                 ) : (
                   <>
-                    <td><span className="font-mono text-wsp-red text-xs tracking-wider">{item.wbs_code}</span></td>
-                    <td className="font-body text-wsp-dark">{item.description || "—"}</td>
+                    <td>
+                      <span className="font-mono text-wsp-red text-xs tracking-wider">{item.wbs_code}</span>
+                    </td>
+                    <td>
+                      {(() => {
+                        const lvl = wbsLevel(item.wbs_code);
+                        const indent = (lvl - 1) * 16;
+                        return (
+                          <span
+                            className={`font-body block ${lvl === 1 ? "font-semibold text-wsp-dark" : lvl === 2 ? "text-wsp-dark" : "text-wsp-muted text-sm"}`}
+                            style={{ paddingLeft: `${indent}px` }}
+                          >
+                            {lvl > 1 && <span className="text-wsp-border mr-1.5">{"└"}</span>}
+                            {item.description || "—"}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="text-wsp-muted">{item.phase || "—"}</td>
                     <td className="text-right font-mono text-sm">{item.hours}</td>
-                    <td className="text-right font-mono text-sm">${item.unit_rate}</td>
-                    <td className="text-right font-mono font-semibold text-sm">${(item.total_cost || 0).toLocaleString()}</td>
+                    <td className="text-right font-mono text-sm">{fmt(item.unit_rate)}</td>
+                    <td className="text-right font-mono font-semibold text-sm">{fmt(item.total_cost || 0)}</td>
                     <td>
                       <div className="flex gap-2 px-4">
                         <button onClick={() => startEdit(item)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
@@ -152,7 +173,7 @@ export default function WBSTab({ proposalId }: Props) {
                 Total
               </td>
               <td className="px-4 py-3 text-right font-mono font-bold text-wsp-dark">
-                ${totalCost.toLocaleString()}
+                {fmt(totalCost)}
               </td>
               <td />
             </tr>

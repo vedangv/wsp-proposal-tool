@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { scheduleApi, ScheduleItem } from "../../api/schedule";
-import { wbsApi, WBSItem } from "../../api/wbs";
+import { scheduleApi, type ScheduleItem } from "../../api/schedule";
+import { wbsApi, type WBSItem } from "../../api/wbs";
 import GanttChart from "../gantt/GanttChart";
 
 interface Props { proposalId: string; }
 
-type ViewMode = "Day" | "Week" | "Month" | "Quarter Year" | "Year";
-const VIEW_MODES: ViewMode[] = ["Day", "Week", "Month", "Quarter Year", "Year"];
+type ViewMode = "Week" | "Month" | "Quarter Year";
+const VIEW_MODES: ViewMode[] = ["Week", "Month", "Quarter Year"];
 
 export default function ScheduleTab({ proposalId }: Props) {
   const qc = useQueryClient();
@@ -26,6 +26,8 @@ export default function ScheduleTab({ proposalId }: Props) {
     queryFn: () => wbsApi.list(proposalId),
   });
 
+  const [importing, setImporting] = useState(false);
+
   const createMutation = useMutation({
     mutationFn: () => scheduleApi.create(proposalId, {
       task_name: "New Task",
@@ -33,6 +35,26 @@ export default function ScheduleTab({ proposalId }: Props) {
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule", proposalId] }),
   });
+
+  const handleImportFromWBS = async () => {
+    if (wbsItems.length === 0) return;
+    setImporting(true);
+    try {
+      await Promise.all(
+        wbsItems.map((w: WBSItem) =>
+          scheduleApi.create(proposalId, {
+            task_name: w.description || w.wbs_code,
+            wbs_id: w.id,
+            phase: w.phase || undefined,
+            is_milestone: false,
+          })
+        )
+      );
+      qc.invalidateQueries({ queryKey: ["schedule", proposalId] });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ScheduleItem> }) =>
@@ -103,6 +125,13 @@ export default function ScheduleTab({ proposalId }: Props) {
             </div>
           )}
 
+          <button
+            onClick={handleImportFromWBS}
+            disabled={importing || wbsItems.length === 0}
+            className="wsp-btn-ghost disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {importing ? "Importing…" : "↑ From WBS"}
+          </button>
           <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
             + Add Task
           </button>
@@ -114,7 +143,7 @@ export default function ScheduleTab({ proposalId }: Props) {
         <div className="wsp-card p-4">
           {isLoading
             ? <p className="text-wsp-muted text-sm py-8 text-center font-body">Loading…</p>
-            : <GanttChart items={items} viewMode={ganttMode} />
+            : <GanttChart items={items} wbsItems={wbsItems} viewMode={ganttMode} />
           }
         </div>
       )}
