@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { peopleApi, type Person } from "../../api/people";
+import { pricingApi } from "../../api/pricing";
 import { agentsApi, type CVResult } from "../../api/agents";
 import CVCard from "../CVCard";
 
@@ -21,6 +22,16 @@ export default function PeopleTab({ proposalId }: Props) {
     queryKey: ["people", proposalId],
     queryFn: () => peopleApi.list(proposalId),
   });
+
+  const { data: pricingRows = [] } = useQuery({
+    queryKey: ["pricing", proposalId],
+    queryFn: () => pricingApi.list(proposalId),
+  });
+
+  const hoursByPerson = pricingRows.reduce<Record<string, number>>((acc, row) => {
+    if (row.person_id) acc[row.person_id] = (acc[row.person_id] ?? 0) + (row.total_hours ?? 0);
+    return acc;
+  }, {});
 
   const createMutation = useMutation({
     mutationFn: () => peopleApi.create(proposalId, { employee_name: "New Person" }),
@@ -200,6 +211,7 @@ export default function PeopleTab({ proposalId }: Props) {
               <th>Role on Project</th>
               <th className="text-right w-28">Rate ($/hr)</th>
               <th className="text-right w-24">Exp (yrs)</th>
+              <th className="text-right w-24">Total Hrs</th>
               <th className="w-24">CV</th>
               <th className="w-20"></th>
             </tr>
@@ -216,6 +228,9 @@ export default function PeopleTab({ proposalId }: Props) {
                     <td><input className="wsp-input w-full text-xs" placeholder="Role on this proposal" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
                     <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.hourly_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, hourly_rate: parseFloat(e.target.value) || undefined }))} /></td>
                     <td><input type="number" className="wsp-input w-full text-right" value={editValues.years_experience ?? ""} onChange={e => setEditValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} /></td>
+                    <td className="text-right font-mono text-sm text-wsp-muted px-3">
+                      {hoursByPerson[person.id] ? `${hoursByPerson[person.id]}h` : "—"}
+                    </td>
                     <td className="text-xs text-wsp-muted">{person.cv_path ? "✓ on file" : "—"}</td>
                     <td>
                       <div className="flex gap-1 px-2">
@@ -239,6 +254,9 @@ export default function PeopleTab({ proposalId }: Props) {
                       {person.hourly_rate != null ? `$${Number(person.hourly_rate).toFixed(0)}/hr` : "—"}
                     </td>
                     <td className="text-right font-mono text-sm">{person.years_experience ?? "—"}</td>
+                    <td className="text-right font-mono text-sm font-semibold text-wsp-dark">
+                      {hoursByPerson[person.id] ? `${hoursByPerson[person.id]}h` : <span className="text-wsp-border font-normal">—</span>}
+                    </td>
                     <td className="text-xs">
                       {person.cv_path
                         ? <span className="text-emerald-600 font-display tracking-wide text-[10px] uppercase">✓ on file</span>

@@ -48,7 +48,7 @@ async def proposal_ws(
 ):
     # Authenticate via token query param (browsers can't set WS headers)
     payload = decode_token(token)
-    user_name = payload.get("sub", "unknown") if payload else "unknown"
+    user_name = (payload.get("name") or payload.get("sub", "unknown")) if payload else "unknown"
 
     await manager.connect(ws, proposal_id, user_name, tab)
     try:
