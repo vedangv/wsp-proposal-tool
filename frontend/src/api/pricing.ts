@@ -4,9 +4,11 @@ export interface PricingRow {
   id: string;
   proposal_id: string;
   wbs_id: string | null;
-  role_title: string | null;
-  staff_name: string | null;
-  grade: string | null;
+  person_id: string | null;
+  // Denormalised from person
+  person_name: string | null;
+  person_wsp_role: string | null;
+  person_team: string | null;
   hourly_rate: number;
   hours_by_phase: Record<string, number>;
   total_hours: number;

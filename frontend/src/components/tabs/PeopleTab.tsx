@@ -46,7 +46,10 @@ export default function PeopleTab({ proposalId }: Props) {
     setEditValues({
       employee_name: p.employee_name,
       employee_id: p.employee_id || "",
+      wsp_role: p.wsp_role || "",
+      team: p.team || "",
       role_on_project: p.role_on_project || "",
+      hourly_rate: p.hourly_rate ?? undefined,
       years_experience: p.years_experience ?? undefined,
     });
   };
@@ -186,14 +189,17 @@ export default function PeopleTab({ proposalId }: Props) {
       )}
 
       {/* People table */}
-      <div className="wsp-card overflow-hidden">
-        <table className="wsp-table w-full">
+      <div className="wsp-card overflow-x-auto">
+        <table className="wsp-table w-full min-w-max">
           <thead>
             <tr>
               <th>Name</th>
               <th className="w-32">Employee ID</th>
+              <th>WSP Role</th>
+              <th className="w-36">Team / Discipline</th>
               <th>Role on Project</th>
-              <th className="text-right w-28">Exp (yrs)</th>
+              <th className="text-right w-28">Rate ($/hr)</th>
+              <th className="text-right w-24">Exp (yrs)</th>
               <th className="w-24">CV</th>
               <th className="w-20"></th>
             </tr>
@@ -205,7 +211,10 @@ export default function PeopleTab({ proposalId }: Props) {
                   <>
                     <td><input className="wsp-input w-full" value={editValues.employee_name || ""} onChange={e => setEditValues(v => ({ ...v, employee_name: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full font-mono text-xs" value={editValues.employee_id || ""} onChange={e => setEditValues(v => ({ ...v, employee_id: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
+                    <td><input className="wsp-input w-full text-xs" placeholder="e.g. Senior Project Manager" value={editValues.wsp_role || ""} onChange={e => setEditValues(v => ({ ...v, wsp_role: e.target.value }))} /></td>
+                    <td><input className="wsp-input w-full text-xs" placeholder="e.g. Transportation" value={editValues.team || ""} onChange={e => setEditValues(v => ({ ...v, team: e.target.value }))} /></td>
+                    <td><input className="wsp-input w-full text-xs" placeholder="Role on this proposal" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
+                    <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.hourly_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, hourly_rate: parseFloat(e.target.value) || undefined }))} /></td>
                     <td><input type="number" className="wsp-input w-full text-right" value={editValues.years_experience ?? ""} onChange={e => setEditValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} /></td>
                     <td className="text-xs text-wsp-muted">{person.cv_path ? "✓ on file" : "—"}</td>
                     <td>
@@ -219,7 +228,16 @@ export default function PeopleTab({ proposalId }: Props) {
                   <>
                     <td className="font-medium text-wsp-dark">{person.employee_name}</td>
                     <td className="font-mono text-wsp-red text-xs">{person.employee_id || "—"}</td>
-                    <td className="text-wsp-muted">{person.role_on_project || "—"}</td>
+                    <td className="text-wsp-muted text-xs">{person.wsp_role || "—"}</td>
+                    <td className="text-xs">
+                      {person.team
+                        ? <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">{person.team}</span>
+                        : <span className="text-wsp-border">—</span>}
+                    </td>
+                    <td className="text-wsp-muted text-xs">{person.role_on_project || "—"}</td>
+                    <td className="text-right font-mono text-sm font-semibold text-wsp-dark">
+                      {person.hourly_rate != null ? `$${Number(person.hourly_rate).toFixed(0)}/hr` : "—"}
+                    </td>
                     <td className="text-right font-mono text-sm">{person.years_experience ?? "—"}</td>
                     <td className="text-xs">
                       {person.cv_path

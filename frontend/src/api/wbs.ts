@@ -6,8 +6,7 @@ export interface WBSItem {
   wbs_code: string;
   description: string | null;
   phase: string | null;
-  hours: number;
-  unit_rate: number;
+  total_hours: number;
   total_cost: number;
   order_index: number;
 }

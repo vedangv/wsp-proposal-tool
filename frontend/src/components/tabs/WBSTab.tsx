@@ -22,7 +22,7 @@ export default function WBSTab({ proposalId }: Props) {
 
   const createMutation = useMutation({
     mutationFn: () => wbsApi.create(proposalId, {
-      wbs_code: "1.0", description: "New item", phase: "", hours: 0, unit_rate: 0,
+      wbs_code: "1.0", description: "New item", phase: "",
       order_index: items.length,
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["wbs", proposalId] }),
@@ -45,7 +45,19 @@ export default function WBSTab({ proposalId }: Props) {
     },
   });
 
-  const totalCost = items.reduce((sum, i) => sum + (i.total_cost || 0), 0);
+  // Total hours: sum leaf nodes only to avoid double-counting rollups
+  const totalHours = items.reduce((sum, i) => {
+    const isParent = items.some(other =>
+      other.id !== i.id && other.wbs_code.startsWith(i.wbs_code + ".")
+    );
+    return isParent ? sum : sum + (i.total_hours || 0);
+  }, 0);
+  const totalCost = items.reduce((sum, i) => {
+    const isParent = items.some(other =>
+      other.id !== i.id && other.wbs_code.startsWith(i.wbs_code + ".")
+    );
+    return isParent ? sum : sum + (i.total_cost || 0);
+  }, 0);
 
   const startEdit = (item: WBSItem) => {
     setEditingId(item.id);
@@ -53,8 +65,6 @@ export default function WBSTab({ proposalId }: Props) {
       wbs_code: item.wbs_code,
       description: item.description || "",
       phase: item.phase || "",
-      hours: item.hours,
-      unit_rate: item.unit_rate,
     });
   };
 
@@ -72,9 +82,14 @@ export default function WBSTab({ proposalId }: Props) {
   return (
     <div>
       <div className="flex justify-between items-center mb-5">
-        <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">
-          Work Breakdown Structure
-        </h3>
+        <div>
+          <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">
+            Work Breakdown Structure
+          </h3>
+          <p className="text-xs text-wsp-muted font-body mt-0.5">
+            Hours and cost are computed from the Pricing Matrix
+          </p>
+        </div>
         <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
           + Add Item
         </button>
@@ -107,7 +122,6 @@ export default function WBSTab({ proposalId }: Props) {
               <th>Description</th>
               <th className="w-32">Phase</th>
               <th className="text-right w-24">Hours</th>
-              <th className="text-right w-28">Rate ($/hr)</th>
               <th className="text-right w-32">Total Cost</th>
               <th className="w-20"></th>
             </tr>
@@ -120,10 +134,11 @@ export default function WBSTab({ proposalId }: Props) {
                     <td><input className="wsp-input w-full font-mono" value={editValues.wbs_code || ""} onChange={e => setEditValues(v => ({ ...v, wbs_code: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full" value={editValues.description || ""} onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full" value={editValues.phase || ""} onChange={e => setEditValues(v => ({ ...v, phase: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full text-right" type="number" value={editValues.hours ?? 0} onChange={e => setEditValues(v => ({ ...v, hours: parseFloat(e.target.value) || 0 }))} /></td>
-                    <td><input className="wsp-input w-full text-right" type="number" value={editValues.unit_rate ?? 0} onChange={e => setEditValues(v => ({ ...v, unit_rate: parseFloat(e.target.value) || 0 }))} /></td>
                     <td className="text-right text-wsp-muted text-xs font-mono px-4">
-                      {fmt((editValues.hours ?? 0) * (editValues.unit_rate ?? 0))}
+                      {item.total_hours || "—"}
+                    </td>
+                    <td className="text-right text-wsp-muted text-xs font-mono px-4">
+                      {item.total_cost > 0 ? fmt(item.total_cost) : "—"}
                     </td>
                     <td>
                       <div className="flex gap-1 px-2">
@@ -153,9 +168,16 @@ export default function WBSTab({ proposalId }: Props) {
                       })()}
                     </td>
                     <td className="text-wsp-muted">{item.phase || "—"}</td>
-                    <td className="text-right font-mono text-sm">{item.hours}</td>
-                    <td className="text-right font-mono text-sm">{fmt(item.unit_rate)}</td>
-                    <td className="text-right font-mono font-semibold text-sm">{fmt(item.total_cost || 0)}</td>
+                    <td className="text-right font-mono text-sm">
+                      {item.total_hours > 0
+                        ? item.total_hours
+                        : <span className="text-wsp-border">—</span>}
+                    </td>
+                    <td className="text-right font-mono font-semibold text-sm">
+                      {item.total_cost > 0
+                        ? fmt(item.total_cost)
+                        : <span className="text-wsp-border font-normal">—</span>}
+                    </td>
                     <td>
                       <div className="flex gap-2 px-4">
                         <button onClick={() => startEdit(item)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
@@ -169,11 +191,14 @@ export default function WBSTab({ proposalId }: Props) {
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-wsp-border bg-wsp-bg-soft">
-              <td colSpan={5} className="px-4 py-3 text-right text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted">
+              <td colSpan={3} className="px-4 py-3 text-right text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted">
                 Total
               </td>
               <td className="px-4 py-3 text-right font-mono font-bold text-wsp-dark">
-                {fmt(totalCost)}
+                {totalHours || "—"}
+              </td>
+              <td className="px-4 py-3 text-right font-mono font-bold text-wsp-dark">
+                {totalCost > 0 ? fmt(totalCost) : "—"}
               </td>
               <td />
             </tr>

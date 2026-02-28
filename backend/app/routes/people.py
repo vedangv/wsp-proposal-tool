@@ -36,12 +36,8 @@ async def create_person(
 ):
     person = ProposedPerson(
         proposal_id=proposal_id,
-        employee_name=body.employee_name,
-        employee_id=body.employee_id,
-        role_on_project=body.role_on_project,
-        years_experience=body.years_experience,
-        cv_path=body.cv_path,
         updated_by=user.id,
+        **body.model_dump(exclude_unset=True),
     )
     db.add(person)
     await db.commit()
