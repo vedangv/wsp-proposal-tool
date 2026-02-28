@@ -4,8 +4,9 @@ const TABS = [
   { id: "pricing",     label: "Pricing Matrix" },
   { id: "people",      label: "People" },
   { id: "schedule",    label: "Schedule" },
-  { id: "deliverables",label: "Deliverables" },
-  { id: "drawings",    label: "Drawing List" },
+  { id: "deliverables",      label: "Deliverables" },
+  { id: "drawings",          label: "Drawing List" },
+  { id: "relevant-projects", label: "Relevant Projects" },
 ];
 
 interface TabNavProps {
