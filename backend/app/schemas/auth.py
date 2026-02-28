@@ -1,3 +1,4 @@
+from uuid import UUID
 from pydantic import BaseModel
 from enum import Enum
 
@@ -14,7 +15,7 @@ class TokenResponse(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: str
+    id: UUID
     name: str
     email: str
     role: UserRole

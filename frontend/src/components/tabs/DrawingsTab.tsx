@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { drawingsApi, Drawing, DrawingFormat, DrawingStatus } from "../../api/drawings";
-import { wbsApi, WBSItem } from "../../api/wbs";
-import { deliverablesApi, Deliverable } from "../../api/deliverables";
+import { drawingsApi, type Drawing, type DrawingFormat, type DrawingStatus } from "../../api/drawings";
+import { wbsApi, type WBSItem } from "../../api/wbs";
+import { deliverablesApi, type Deliverable } from "../../api/deliverables";
 
 interface Props { proposalId: string; }
 

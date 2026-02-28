@@ -1,4 +1,4 @@
-import { CVResult } from "../api/agents";
+import type { CVResult } from "../api/agents";
 
 interface Props {
   cv: CVResult;

@@ -130,6 +130,12 @@ def run_job(job_id: str) -> None:
     job["status"] = "running"
 
     names = job["names"]
+    if not names:
+        job["status"] = "complete"
+        job["result"] = [{**cv, "requested_name": cv["employee_name"]} for cv in MOCK_CVS]
+        job["completed_at"] = datetime.now(timezone.utc).isoformat()
+        return
+
     matched = []
     for name in names:
         name_lower = name.lower()

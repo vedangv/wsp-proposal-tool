@@ -6,14 +6,14 @@ services:
       POSTGRES_PASSWORD: wsp
       POSTGRES_DB: wsp_proposals
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://wsp:wsp@db:5432/wsp_proposals
       SECRET_KEY: dev-secret-key-change-in-production
@@ -27,9 +27,9 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
+      - "3000:5173"
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: http://localhost:8001
     depends_on:
       - backend
     volumes:

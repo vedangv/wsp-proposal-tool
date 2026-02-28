@@ -10,7 +10,7 @@ import OverviewTab from "../components/tabs/OverviewTab";
 import ScheduleTab from "../components/tabs/ScheduleTab";
 import DeliverablesTab from "../components/tabs/DeliverablesTab";
 import DrawingsTab from "../components/tabs/DrawingsTab";
-import { useProposalSocket, Presence } from "../hooks/useProposalSocket";
+import { useProposalSocket, type Presence } from "../hooks/useProposalSocket";
 
 const STATUS_STYLES: Record<string, string> = {
   draft:     "bg-wsp-bg-soft text-wsp-muted",

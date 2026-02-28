@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { peopleApi, Person } from "../../api/people";
-import { agentsApi, CVResult } from "../../api/agents";
+import { peopleApi, type Person } from "../../api/people";
+import { agentsApi, type CVResult } from "../../api/agents";
 import CVCard from "../CVCard";
 
 interface Props { proposalId: string; }
@@ -68,8 +68,15 @@ export default function PeopleTab({ proposalId }: Props) {
         role_on_project: cv.role_on_project,
         years_experience: cv.years_experience,
       });
-      qc.invalidateQueries({ queryKey: ["people", proposalId] });
+    } else {
+      await peopleApi.create(proposalId, {
+        employee_name: cv.employee_name,
+        employee_id: cv.employee_id,
+        role_on_project: cv.role_on_project,
+        years_experience: cv.years_experience,
+      });
     }
+    qc.invalidateQueries({ queryKey: ["people", proposalId] });
     setDismissed(d => new Set(d).add(cv.employee_id));
   };
 
@@ -78,7 +85,6 @@ export default function PeopleTab({ proposalId }: Props) {
 
   const handleFetchCVs = async () => {
     const names = people.map(p => p.employee_name).filter(Boolean);
-    if (names.length === 0) return;
 
     setFetchState("fetching");
     setCvResults([]);
@@ -126,7 +132,7 @@ export default function PeopleTab({ proposalId }: Props) {
           )}
           <button
             onClick={handleFetchCVs}
-            disabled={fetchState === "fetching" || people.length === 0}
+            disabled={fetchState === "fetching"}
             className={`wsp-btn-primary disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2
               ${fetchState === "fetching" ? "animate-pulse" : ""}`}
           >

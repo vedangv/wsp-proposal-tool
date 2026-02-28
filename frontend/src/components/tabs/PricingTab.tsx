@@ -1,16 +1,31 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { pricingApi, PricingRow } from "../../api/pricing";
-import { wbsApi, WBSItem } from "../../api/wbs";
+import { pricingApi, type PricingRow } from "../../api/pricing";
+import { wbsApi, type WBSItem } from "../../api/wbs";
 
 interface Props { proposalId: string; }
 
 const PHASES = ["Study", "Preliminary", "Detailed", "Tender", "Construction"];
 
+const fmt = (n: number) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
+
+// Distribute WBS hours across phases based on phase name
+const phaseHours = (phase: string | null, totalHours: number): Record<string, number> => {
+  const p = (phase || "").toLowerCase();
+  if (p.includes("study") || p.includes("assessment") || p.includes("1"))
+    return { Study: totalHours };
+  if (p.includes("prelim") || p.includes("design") || p.includes("2"))
+    return { Preliminary: totalHours };
+  if (p.includes("report") || p.includes("3"))
+    return { Preliminary: Math.round(totalHours * 0.6), Detailed: Math.round(totalHours * 0.4) };
+  return { Study: Math.round(totalHours * 0.5), Preliminary: Math.round(totalHours * 0.5) };
+};
+
 export default function PricingTab({ proposalId }: Props) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<PricingRow>>({});
+  const [importing, setImporting] = useState(false);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["pricing", proposalId],
@@ -57,6 +72,27 @@ export default function PricingTab({ proposalId }: Props) {
 
   const saveEdit = (id: string) => updateMutation.mutate({ id, data: editValues });
 
+  const handleImportFromWBS = async () => {
+    const leafItems = wbsItems.filter((w: WBSItem) => w.hours > 0);
+    if (leafItems.length === 0) return;
+    setImporting(true);
+    try {
+      await Promise.all(
+        leafItems.map((w: WBSItem) =>
+          pricingApi.create(proposalId, {
+            wbs_id: w.id,
+            role_title: w.description || w.wbs_code,
+            hourly_rate: w.unit_rate,
+            hours_by_phase: phaseHours(w.phase, w.hours),
+          })
+        )
+      );
+      qc.invalidateQueries({ queryKey: ["pricing", proposalId] });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const setPhaseHours = (phase: string, val: number) => {
     setEditValues(v => ({
       ...v,
@@ -74,28 +110,37 @@ export default function PricingTab({ proposalId }: Props) {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold text-gray-800">Pricing Matrix</h3>
-        <button
-          onClick={() => createMutation.mutate()}
-          className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
-        >+ Add Row</button>
+      <div className="flex justify-between items-center mb-5">
+        <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Pricing Matrix</h3>
+        <div className="flex gap-2">
+          <button
+            onClick={handleImportFromWBS}
+            disabled={importing || wbsItems.length === 0}
+            className="wsp-btn-ghost disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {importing ? "Importing…" : "↑ From WBS"}
+          </button>
+          <button
+            onClick={() => createMutation.mutate()}
+            className="wsp-btn-primary"
+          >+ Add Row</button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        <table className="w-full text-sm min-w-max">
-          <thead className="bg-gray-50 border-b">
+      <div className="wsp-card overflow-x-auto">
+        <table className="wsp-table w-full min-w-max">
+          <thead>
             <tr>
-              <th className="text-left px-3 py-2 text-gray-600 font-medium">WBS Link</th>
-              <th className="text-left px-3 py-2 text-gray-600 font-medium">Role</th>
-              <th className="text-left px-3 py-2 text-gray-600 font-medium">Staff</th>
-              <th className="text-left px-3 py-2 text-gray-600 font-medium">Grade</th>
-              <th className="text-right px-3 py-2 text-gray-600 font-medium">Rate</th>
+              <th className="w-36">WBS Link</th>
+              <th>Role</th>
+              <th className="w-28">Staff</th>
+              <th className="w-20">Grade</th>
+              <th className="text-right w-20">Rate</th>
               {PHASES.map(p => (
-                <th key={p} className="text-right px-3 py-2 text-gray-600 font-medium w-20">{p}</th>
+                <th key={p} className="text-right w-20">{p}</th>
               ))}
-              <th className="text-right px-3 py-2 text-gray-600 font-medium">Hrs</th>
-              <th className="text-right px-3 py-2 text-gray-600 font-medium">Total</th>
+              <th className="text-right w-16">Hrs</th>
+              <th className="text-right w-28">Total</th>
               <th className="w-20"></th>
             </tr>
           </thead>
@@ -140,37 +185,39 @@ export default function PricingTab({ proposalId }: Props) {
                   </>
                 ) : (
                   <>
-                    <td className="px-3 py-2 text-xs text-blue-700 max-w-[9rem] truncate">{wbsLabel(row.wbs_id)}</td>
-                    <td className="px-3 py-2">{row.role_title || "—"}</td>
-                    <td className="px-3 py-2 text-gray-500">{row.staff_name || "—"}</td>
-                    <td className="px-3 py-2 text-gray-500">{row.grade || "—"}</td>
-                    <td className="px-3 py-2 text-right">${row.hourly_rate}</td>
+                    <td><span className="font-mono text-wsp-red text-xs truncate block max-w-[9rem]">{wbsLabel(row.wbs_id)}</span></td>
+                    <td className="font-body">{row.role_title || "—"}</td>
+                    <td className="text-wsp-muted">{row.staff_name || "—"}</td>
+                    <td className="text-wsp-muted">{row.grade || "—"}</td>
+                    <td className="text-right font-mono text-sm">{fmt(row.hourly_rate)}</td>
                     {PHASES.map(p => (
-                      <td key={p} className="px-3 py-2 text-right text-gray-600">
+                      <td key={p} className="text-right font-mono text-sm text-wsp-muted">
                         {row.hours_by_phase?.[p] ?? 0}
                       </td>
                     ))}
-                    <td className="px-3 py-2 text-right font-medium">{row.total_hours}</td>
-                    <td className="px-3 py-2 text-right font-medium">${(row.total_cost || 0).toLocaleString()}</td>
-                    <td className="px-3 py-2 flex gap-2">
-                      <button onClick={() => startEdit(row)} className="text-gray-400 hover:text-gray-700 text-xs">Edit</button>
-                      <button onClick={() => deleteMutation.mutate(row.id)} className="text-red-400 hover:text-red-600 text-xs">Del</button>
+                    <td className="text-right font-mono text-sm font-semibold">{row.total_hours}</td>
+                    <td className="text-right font-mono font-semibold text-sm">{fmt(row.total_cost || 0)}</td>
+                    <td>
+                      <div className="flex gap-2 px-4">
+                        <button onClick={() => startEdit(row)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
+                        <button onClick={() => deleteMutation.mutate(row.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                      </div>
                     </td>
                   </>
                 )}
               </tr>
             ))}
           </tbody>
-          <tfoot className="border-t bg-gray-50">
-            <tr>
-              <td colSpan={8 + PHASES.length} className="px-3 py-3 text-right text-sm font-semibold text-gray-700">Grand Total</td>
-              <td className="px-3 py-3 text-right font-bold text-gray-900">${grandTotal.toLocaleString()}</td>
-              <td></td>
+          <tfoot>
+            <tr className="border-t-2 border-wsp-border bg-wsp-bg-soft">
+              <td colSpan={8 + PHASES.length} className="px-4 py-3 text-right text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted">Grand Total</td>
+              <td className="px-4 py-3 text-right font-mono font-bold text-wsp-dark">{fmt(grandTotal)}</td>
+              <td />
             </tr>
           </tfoot>
         </table>
         {rows.length === 0 && !isLoading && (
-          <p className="text-center py-10 text-gray-400 text-sm">No pricing rows yet. Add one.</p>
+          <p className="text-center py-12 text-wsp-muted text-sm font-body">No pricing rows yet. Add one or use ↑ From WBS.</p>
         )}
       </div>
     </div>

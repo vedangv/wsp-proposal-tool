@@ -28,9 +28,9 @@ class WBSItemOut(BaseModel):
     wbs_code: str
     description: Optional[str]
     phase: Optional[str]
-    hours: Decimal
-    unit_rate: Decimal
-    total_cost: Decimal
+    hours: float
+    unit_rate: float
+    total_cost: float
     order_index: int = 0
 
     model_config = {"from_attributes": True}

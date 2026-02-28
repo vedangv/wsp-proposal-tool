@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { deliverablesApi, Deliverable, DeliverableType, DeliverableStatus } from "../../api/deliverables";
-import { wbsApi, WBSItem } from "../../api/wbs";
+import { deliverablesApi, type Deliverable, type DeliverableType, type DeliverableStatus } from "../../api/deliverables";
+import { wbsApi, type WBSItem } from "../../api/wbs";
 
 interface Props { proposalId: string; }
 

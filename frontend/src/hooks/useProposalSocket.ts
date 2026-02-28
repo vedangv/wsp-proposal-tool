@@ -38,7 +38,8 @@ export function useProposalSocket({ proposalId, activeTab, onPresence }: Options
     const token = localStorage.getItem("token");
     if (!token || !proposalId) return;
 
-    const wsUrl = `ws://localhost:8000/ws/proposals/${proposalId}?token=${token}&tab=${activeTabRef.current}`;
+    const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:8001").replace("http", "ws");
+    const wsUrl = `${apiBase}/ws/proposals/${proposalId}?token=${token}&tab=${activeTabRef.current}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

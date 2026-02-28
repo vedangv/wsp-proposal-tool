@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { scopeApi, ScopeSection } from "../../api/scope";
+import { scopeApi, type ScopeSection } from "../../api/scope";
 
 interface Props { proposalId: string; }
 
