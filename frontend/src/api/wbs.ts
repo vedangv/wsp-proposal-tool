@@ -8,6 +8,7 @@ export interface WBSItem {
   phase: string | null;
   total_hours: number;
   total_cost: number;
+  total_cost_internal: number;
   order_index: number;
 }
 

@@ -10,6 +10,8 @@ class PersonCreate(BaseModel):
     wsp_role: Optional[str] = None
     team: Optional[str] = None
     role_on_project: Optional[str] = None
+    cost_rate: Optional[Decimal] = None
+    burdened_rate: Optional[Decimal] = None
     hourly_rate: Optional[Decimal] = None
     years_experience: Optional[int] = None
     cv_path: Optional[str] = None
@@ -21,6 +23,8 @@ class PersonUpdate(BaseModel):
     wsp_role: Optional[str] = None
     team: Optional[str] = None
     role_on_project: Optional[str] = None
+    cost_rate: Optional[Decimal] = None
+    burdened_rate: Optional[Decimal] = None
     hourly_rate: Optional[Decimal] = None
     years_experience: Optional[int] = None
     cv_path: Optional[str] = None
@@ -34,6 +38,8 @@ class PersonOut(BaseModel):
     wsp_role: Optional[str]
     team: Optional[str]
     role_on_project: Optional[str]
+    cost_rate: Optional[Decimal]
+    burdened_rate: Optional[Decimal]
     hourly_rate: Optional[Decimal]
     years_experience: Optional[int]
     cv_path: Optional[str]

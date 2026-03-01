@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scopeApi, type ScopeSection } from "../../api/scope";
+import { wbsApi, type WBSItem } from "../../api/wbs";
 
 interface Props { proposalId: string; }
 
@@ -9,11 +10,19 @@ export default function OverviewTab({ proposalId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editName, setEditName] = useState("");
+  const [editWbsId, setEditWbsId] = useState<string | null>(null);
 
   const { data: sections = [], isLoading } = useQuery({
     queryKey: ["scope", proposalId],
     queryFn: () => scopeApi.list(proposalId),
   });
+
+  const { data: wbsItems = [] } = useQuery({
+    queryKey: ["wbs", proposalId],
+    queryFn: () => wbsApi.list(proposalId),
+  });
+
+  const wbsMap = Object.fromEntries(wbsItems.map(w => [w.id, w]));
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ScopeSection> }) =>
@@ -42,10 +51,11 @@ export default function OverviewTab({ proposalId }: Props) {
     setEditingId(s.id);
     setEditContent(s.content);
     setEditName(s.section_name);
+    setEditWbsId(s.wbs_id);
   };
 
   const saveEdit = (id: string) =>
-    updateMutation.mutate({ id, data: { section_name: editName, content: editContent } });
+    updateMutation.mutate({ id, data: { section_name: editName, content: editContent, wbs_id: editWbsId || undefined } });
 
   if (isLoading) return <div className="py-8 text-gray-400 text-sm text-center">Loading…</div>;
 
@@ -69,6 +79,16 @@ export default function OverviewTab({ proposalId }: Props) {
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
                 />
+                <select
+                  className="border rounded px-3 py-1.5 w-full text-sm"
+                  value={editWbsId || ""}
+                  onChange={e => setEditWbsId(e.target.value || null)}
+                >
+                  <option value="">— No WBS link —</option>
+                  {wbsItems.map(w => (
+                    <option key={w.id} value={w.id}>{w.wbs_code} — {w.description || "Untitled"}</option>
+                  ))}
+                </select>
                 <textarea
                   className="border rounded px-3 py-2 w-full text-sm resize-none"
                   rows={6}
@@ -90,14 +110,21 @@ export default function OverviewTab({ proposalId }: Props) {
             ) : (
               <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-semibold text-gray-800 text-sm">{section.section_name}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-gray-800 text-sm">{section.section_name}</h4>
+                    {section.wbs_id && wbsMap[section.wbs_id] && (
+                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-red border border-wsp-border text-[10px] font-mono">
+                        {wbsMap[section.wbs_id].wbs_code}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => startEdit(section)}
                       className="text-xs text-gray-400 hover:text-gray-700"
                     >Edit</button>
                     <button
-                      onClick={() => deleteMutation.mutate(section.id)}
+                      onClick={() => window.confirm("Delete this section?") && deleteMutation.mutate(section.id)}
                       className="text-xs text-red-400 hover:text-red-600"
                     >Del</button>
                   </div>

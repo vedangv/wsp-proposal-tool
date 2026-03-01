@@ -2,7 +2,9 @@ import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { proposalsApi } from "../api/proposals";
+import { dashboardApi, type Dashboard } from "../api/dashboard";
 import TabNav from "../components/tabs/TabNav";
+import DashboardTab from "../components/tabs/DashboardTab";
 import WBSTab from "../components/tabs/WBSTab";
 import PricingTab from "../components/tabs/PricingTab";
 import PeopleTab from "../components/tabs/PeopleTab";
@@ -24,7 +26,7 @@ const STATUS_STYLES: Record<string, string> = {
 export default function ProposalDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("wbs");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [presence, setPresence] = useState<Presence>({});
 
   const onPresence = useCallback((p: Presence) => setPresence(p), []);
@@ -36,6 +38,24 @@ export default function ProposalDetailPage() {
     queryFn: () => proposalsApi.get(id!),
     enabled: !!id,
   });
+
+  const { data: dashData } = useQuery({
+    queryKey: ["dashboard", id],
+    queryFn: () => dashboardApi.get(id!),
+    enabled: !!id,
+    refetchInterval: 30000,
+  });
+
+  const tabCounts = dashData ? {
+    overview: dashData.scope_count,
+    wbs: dashData.wbs_count,
+    pricing: dashData.pricing_count,
+    people: dashData.people_count,
+    schedule: dashData.schedule_count,
+    deliverables: dashData.deliverables_count,
+    drawings: dashData.drawings_count,
+    "relevant-projects": dashData.relevant_projects_count,
+  } as Record<string, number> : undefined;
 
   if (isLoading) return (
     <div className="min-h-screen bg-wsp-bg-soft flex items-center justify-center">
@@ -97,9 +117,10 @@ export default function ProposalDetailPage() {
         </div>
       </header>
 
-      <TabNav activeTab={activeTab} onChange={setActiveTab} presence={presence} />
+      <TabNav activeTab={activeTab} onChange={setActiveTab} presence={presence} counts={tabCounts} />
 
       <div className="max-w-7xl mx-auto py-6 px-6">
+        {activeTab === "dashboard"    && <DashboardTab proposalId={id!} />}
         {activeTab === "wbs"          && <WBSTab proposalId={id!} />}
         {activeTab === "overview"     && <OverviewTab proposalId={id!} />}
         {activeTab === "pricing"      && <PricingTab proposalId={id!} />}

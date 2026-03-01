@@ -14,6 +14,8 @@ class ProposedPerson(Base):
     wsp_role = Column(String, nullable=True)
     team = Column(String, nullable=True)
     role_on_project = Column(String)
+    cost_rate = Column(Numeric(10, 2), nullable=True, default=0)
+    burdened_rate = Column(Numeric(10, 2), nullable=True, default=0)
     hourly_rate = Column(Numeric(10, 2), nullable=True, default=0)
     years_experience = Column(Integer)
     cv_path = Column(String, nullable=True)

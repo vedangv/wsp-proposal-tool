@@ -12,6 +12,7 @@ class PricingRow(Base):
     wbs_id = Column(UUID(as_uuid=True), ForeignKey("wbs_items.id", ondelete="SET NULL"), nullable=True)
     person_id = Column(UUID(as_uuid=True), ForeignKey("proposed_people.id", ondelete="SET NULL"), nullable=True)
     hourly_rate = Column(Numeric(10, 2), default=0)
+    cost_rate = Column(Numeric(10, 2), default=0)
     hours_by_phase = Column(JSONB, default=dict)
     updated_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

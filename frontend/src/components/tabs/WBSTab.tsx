@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { wbsApi, type WBSItem } from "../../api/wbs";
+import { usePhases } from "../../hooks/usePhases";
 
 const fmt = (n: number) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
 
@@ -11,6 +12,7 @@ interface Props { proposalId: string; }
 
 export default function WBSTab({ proposalId }: Props) {
   const qc = useQueryClient();
+  const phases = usePhases(proposalId);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<WBSItem>>({});
   const [deleteWarning, setDeleteWarning] = useState<{ id: string; count: number } | null>(null);
@@ -21,12 +23,39 @@ export default function WBSTab({ proposalId }: Props) {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => wbsApi.create(proposalId, {
-      wbs_code: "1.0", description: "New item", phase: "",
-      order_index: items.length,
-    }),
+    mutationFn: (data: { wbs_code: string; description: string; phase: string; order_index: number }) =>
+      wbsApi.create(proposalId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["wbs", proposalId] }),
   });
+
+  const nextTopLevelCode = () => {
+    const topCodes = items
+      .map(i => i.wbs_code)
+      .filter(c => !c.includes("."))
+      .map(Number)
+      .filter(n => !isNaN(n));
+    return String((topCodes.length > 0 ? Math.max(...topCodes) : 0) + 1);
+  };
+
+  const nextChildCode = (parentCode: string) => {
+    const prefix = parentCode + ".";
+    const childNums = items
+      .map(i => i.wbs_code)
+      .filter(c => c.startsWith(prefix) && !c.slice(prefix.length).includes("."))
+      .map(c => Number(c.slice(prefix.length)))
+      .filter(n => !isNaN(n));
+    return prefix + String((childNums.length > 0 ? Math.max(...childNums) : 0) + 1);
+  };
+
+  const addTopLevel = () => {
+    const code = nextTopLevelCode();
+    createMutation.mutate({ wbs_code: code, description: "New item", phase: "", order_index: items.length });
+  };
+
+  const addChild = (parentCode: string) => {
+    const code = nextChildCode(parentCode);
+    createMutation.mutate({ wbs_code: code, description: "", phase: "", order_index: items.length });
+  };
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<WBSItem> }) =>
@@ -46,18 +75,14 @@ export default function WBSTab({ proposalId }: Props) {
   });
 
   // Total hours: sum leaf nodes only to avoid double-counting rollups
-  const totalHours = items.reduce((sum, i) => {
-    const isParent = items.some(other =>
-      other.id !== i.id && other.wbs_code.startsWith(i.wbs_code + ".")
-    );
-    return isParent ? sum : sum + (i.total_hours || 0);
-  }, 0);
-  const totalCost = items.reduce((sum, i) => {
-    const isParent = items.some(other =>
-      other.id !== i.id && other.wbs_code.startsWith(i.wbs_code + ".")
-    );
-    return isParent ? sum : sum + (i.total_cost || 0);
-  }, 0);
+  const isParent = (item: WBSItem) => items.some(other =>
+    other.id !== item.id && other.wbs_code.startsWith(item.wbs_code + ".")
+  );
+  const totalHours = items.reduce((sum, i) => isParent(i) ? sum : sum + (i.total_hours || 0), 0);
+  const totalCost = items.reduce((sum, i) => isParent(i) ? sum : sum + (i.total_cost || 0), 0);
+  const totalCostInternal = items.reduce((sum, i) => isParent(i) ? sum : sum + (i.total_cost_internal || 0), 0);
+  const totalMargin = totalCost - totalCostInternal;
+  const totalMarginPct = totalCost > 0 ? (totalMargin / totalCost) * 100 : 0;
 
   const startEdit = (item: WBSItem) => {
     setEditingId(item.id);
@@ -75,7 +100,7 @@ export default function WBSTab({ proposalId }: Props) {
     if (links.total > 0) {
       setDeleteWarning({ id, count: links.total });
     } else {
-      deleteMutation.mutate(id);
+      if (window.confirm("Delete this WBS item?")) deleteMutation.mutate(id);
     }
   };
 
@@ -90,7 +115,7 @@ export default function WBSTab({ proposalId }: Props) {
             Hours and cost are computed from the Pricing Matrix
           </p>
         </div>
-        <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
+        <button onClick={addTopLevel} className="wsp-btn-primary">
           + Add Item
         </button>
       </div>
@@ -122,7 +147,8 @@ export default function WBSTab({ proposalId }: Props) {
               <th>Description</th>
               <th className="w-32">Phase</th>
               <th className="text-right w-24">Hours</th>
-              <th className="text-right w-32">Total Cost</th>
+              <th className="text-right w-28">Cost</th>
+              <th className="text-right w-28">Billing</th>
               <th className="w-20"></th>
             </tr>
           </thead>
@@ -133,9 +159,15 @@ export default function WBSTab({ proposalId }: Props) {
                   <>
                     <td><input className="wsp-input w-full font-mono" value={editValues.wbs_code || ""} onChange={e => setEditValues(v => ({ ...v, wbs_code: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full" value={editValues.description || ""} onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full" value={editValues.phase || ""} onChange={e => setEditValues(v => ({ ...v, phase: e.target.value }))} /></td>
+                    <td><select className="wsp-input w-full" value={editValues.phase || ""} onChange={e => setEditValues(v => ({ ...v, phase: e.target.value }))}>
+                      <option value="">—</option>
+                      {phases.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select></td>
                     <td className="text-right text-wsp-muted text-xs font-mono px-4">
                       {item.total_hours || "—"}
+                    </td>
+                    <td className="text-right text-wsp-muted text-xs font-mono px-4">
+                      {item.total_cost_internal > 0 ? fmt(item.total_cost_internal) : "—"}
                     </td>
                     <td className="text-right text-wsp-muted text-xs font-mono px-4">
                       {item.total_cost > 0 ? fmt(item.total_cost) : "—"}
@@ -173,13 +205,19 @@ export default function WBSTab({ proposalId }: Props) {
                         ? item.total_hours
                         : <span className="text-wsp-border">—</span>}
                     </td>
+                    <td className="text-right font-mono text-sm text-wsp-muted">
+                      {item.total_cost_internal > 0
+                        ? fmt(item.total_cost_internal)
+                        : <span className="text-wsp-border">—</span>}
+                    </td>
                     <td className="text-right font-mono font-semibold text-sm">
                       {item.total_cost > 0
                         ? fmt(item.total_cost)
                         : <span className="text-wsp-border font-normal">—</span>}
                     </td>
                     <td>
-                      <div className="flex gap-2 px-4">
+                      <div className="flex gap-2 px-2">
+                        <button onClick={() => addChild(item.wbs_code)} className="text-wsp-muted hover:text-wsp-dark text-xs" title="Add child item">+Child</button>
                         <button onClick={() => startEdit(item)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
                         <button onClick={() => handleDelete(item.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
                       </div>
@@ -197,11 +235,29 @@ export default function WBSTab({ proposalId }: Props) {
               <td className="px-4 py-3 text-right font-mono font-bold text-wsp-dark">
                 {totalHours || "—"}
               </td>
+              <td className="px-4 py-3 text-right font-mono font-bold text-wsp-muted">
+                {totalCostInternal > 0 ? fmt(totalCostInternal) : "—"}
+              </td>
               <td className="px-4 py-3 text-right font-mono font-bold text-wsp-dark">
                 {totalCost > 0 ? fmt(totalCost) : "—"}
               </td>
               <td />
             </tr>
+            {totalCost > 0 && (
+              <tr className="bg-wsp-bg-soft">
+                <td colSpan={3} className="px-4 pb-3 text-right text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted">
+                  Margin
+                </td>
+                <td />
+                <td className="px-4 pb-3 text-right font-mono text-sm text-wsp-muted">
+                  {fmt(totalMargin)}
+                </td>
+                <td className={`px-4 pb-3 text-right font-mono font-bold text-sm ${totalMarginPct >= 30 ? "text-emerald-600" : "text-amber-600"}`}>
+                  {totalMarginPct.toFixed(0)}%
+                </td>
+                <td />
+              </tr>
+            )}
           </tfoot>
         </table>
         {items.length === 0 && !isLoading && (

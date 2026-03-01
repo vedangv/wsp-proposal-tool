@@ -26,6 +26,7 @@ class WBSItemOut(BaseModel):
     phase: Optional[str]
     total_hours: float
     total_cost: float
+    total_cost_internal: float
     order_index: int = 0
 
     model_config = {"from_attributes": True}

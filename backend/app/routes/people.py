@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.auth.deps import get_current_user
 from app.models.people import ProposedPerson
+from app.models.pricing import PricingRow
 from app.models.user import User
 from app.schemas.people import PersonCreate, PersonUpdate, PersonOut
 
@@ -61,9 +62,24 @@ async def update_person(
     person = result.scalar_one_or_none()
     if not person:
         raise HTTPException(404, "Person not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(person, field, value)
     person.updated_by = user.id
+
+    # Cascade rate changes to all pricing rows referencing this person
+    rate_fields = {"hourly_rate", "cost_rate"}
+    if rate_fields & updates.keys():
+        pricing_result = await db.execute(
+            select(PricingRow).where(PricingRow.person_id == person_id)
+        )
+        for row in pricing_result.scalars().all():
+            if "hourly_rate" in updates:
+                row.hourly_rate = person.hourly_rate
+            if "cost_rate" in updates:
+                row.cost_rate = person.cost_rate
+
     await db.commit()
     await db.refresh(person)
     return person

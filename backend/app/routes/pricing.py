@@ -18,6 +18,7 @@ def _to_out(row: PricingRow, person: ProposedPerson | None = None) -> PricingRow
     phases = row.hours_by_phase or {}
     total_hours = sum(float(v) for v in phases.values())
     total_cost = total_hours * float(row.hourly_rate or 0)
+    total_cost_internal = total_hours * float(row.cost_rate or 0)
     return PricingRowOut(
         id=row.id,
         proposal_id=row.proposal_id,
@@ -27,9 +28,11 @@ def _to_out(row: PricingRow, person: ProposedPerson | None = None) -> PricingRow
         person_wsp_role=person.wsp_role if person else None,
         person_team=person.team if person else None,
         hourly_rate=float(row.hourly_rate or 0),
+        cost_rate=float(row.cost_rate or 0),
         hours_by_phase=phases,
         total_hours=total_hours,
         total_cost=total_cost,
+        total_cost_internal=total_cost_internal,
     )
 
 
@@ -65,22 +68,27 @@ async def create_pricing(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # Auto-fill rate from person if person_id provided and rate not overridden
-    rate = body.hourly_rate
+    # Auto-fill rates from person if person_id provided and rates not overridden
+    billing_rate = body.hourly_rate
+    cost_rate = body.cost_rate
     person = None
     if body.person_id:
         ppl_result = await db.execute(
             select(ProposedPerson).where(ProposedPerson.id == body.person_id)
         )
         person = ppl_result.scalar_one_or_none()
-        if person and rate == 0:
-            rate = float(person.hourly_rate or 0)
+        if person:
+            if billing_rate == 0:
+                billing_rate = float(person.hourly_rate or 0)
+            if cost_rate == 0:
+                cost_rate = float(person.cost_rate or 0)
 
     row = PricingRow(
         proposal_id=proposal_id,
         wbs_id=body.wbs_id,
         person_id=body.person_id,
-        hourly_rate=rate,
+        hourly_rate=billing_rate,
+        cost_rate=cost_rate,
         hours_by_phase=body.hours_by_phase,
         updated_by=user.id,
     )
@@ -109,14 +117,15 @@ async def update_pricing(
 
     updates = body.model_dump(exclude_unset=True)
 
-    # If person changed and rate not explicitly set, refresh rate from new person
-    if "person_id" in updates and "hourly_rate" not in updates and updates["person_id"]:
+    # If person changed, refresh both rates from new person
+    if "person_id" in updates and updates["person_id"]:
         ppl_result = await db.execute(
             select(ProposedPerson).where(ProposedPerson.id == updates["person_id"])
         )
         person = ppl_result.scalar_one_or_none()
         if person:
             updates["hourly_rate"] = float(person.hourly_rate or 0)
+            updates["cost_rate"] = float(person.cost_rate or 0)
 
     for field, value in updates.items():
         setattr(row, field, value)

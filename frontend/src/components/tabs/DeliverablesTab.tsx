@@ -174,7 +174,7 @@ export default function DeliverablesTab({ proposalId }: Props) {
                     <td>
                       <div className="flex gap-2">
                         <button onClick={() => startEdit(d)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                        <button onClick={() => deleteMutation.mutate(d.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                        <button onClick={() => window.confirm("Delete this deliverable?") && deleteMutation.mutate(d.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
                       </div>
                     </td>
                   </>

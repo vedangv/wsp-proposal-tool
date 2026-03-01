@@ -43,6 +43,8 @@ export default function PeopleTab({ proposalId }: Props) {
       peopleApi.update(proposalId, id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people", proposalId] });
+      qc.invalidateQueries({ queryKey: ["pricing", proposalId] });
+      qc.invalidateQueries({ queryKey: ["wbs", proposalId] });
       setEditingId(null);
     },
   });
@@ -60,6 +62,8 @@ export default function PeopleTab({ proposalId }: Props) {
       wsp_role: p.wsp_role || "",
       team: p.team || "",
       role_on_project: p.role_on_project || "",
+      cost_rate: p.cost_rate ?? undefined,
+      burdened_rate: p.burdened_rate ?? undefined,
       hourly_rate: p.hourly_rate ?? undefined,
       years_experience: p.years_experience ?? undefined,
     });
@@ -209,7 +213,10 @@ export default function PeopleTab({ proposalId }: Props) {
               <th>WSP Role</th>
               <th className="w-36">Team / Discipline</th>
               <th>Role on Project</th>
-              <th className="text-right w-28">Rate ($/hr)</th>
+              <th className="text-right w-24">Cost ($/hr)</th>
+              <th className="text-right w-24">Burdened</th>
+              <th className="text-right w-24">Billing</th>
+              <th className="text-right w-16">DLM</th>
               <th className="text-right w-24">Exp (yrs)</th>
               <th className="text-right w-24">Total Hrs</th>
               <th className="w-24">CV</th>
@@ -226,7 +233,14 @@ export default function PeopleTab({ proposalId }: Props) {
                     <td><input className="wsp-input w-full text-xs" placeholder="e.g. Senior Project Manager" value={editValues.wsp_role || ""} onChange={e => setEditValues(v => ({ ...v, wsp_role: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full text-xs" placeholder="e.g. Transportation" value={editValues.team || ""} onChange={e => setEditValues(v => ({ ...v, team: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full text-xs" placeholder="Role on this proposal" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
+                    <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.cost_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, cost_rate: parseFloat(e.target.value) || undefined }))} /></td>
+                    <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.burdened_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, burdened_rate: parseFloat(e.target.value) || undefined }))} /></td>
                     <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.hourly_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, hourly_rate: parseFloat(e.target.value) || undefined }))} /></td>
+                    <td className="text-right font-mono text-xs text-wsp-muted px-3">
+                      {editValues.cost_rate && editValues.hourly_rate
+                        ? (Number(editValues.hourly_rate) / Number(editValues.cost_rate)).toFixed(2)
+                        : "—"}
+                    </td>
                     <td><input type="number" className="wsp-input w-full text-right" value={editValues.years_experience ?? ""} onChange={e => setEditValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} /></td>
                     <td className="text-right font-mono text-sm text-wsp-muted px-3">
                       {hoursByPerson[person.id] ? `${hoursByPerson[person.id]}h` : "—"}
@@ -250,8 +264,21 @@ export default function PeopleTab({ proposalId }: Props) {
                         : <span className="text-wsp-border">—</span>}
                     </td>
                     <td className="text-wsp-muted text-xs">{person.role_on_project || "—"}</td>
+                    <td className="text-right font-mono text-sm text-wsp-muted">
+                      {person.cost_rate != null && Number(person.cost_rate) > 0 ? `$${Number(person.cost_rate).toFixed(0)}` : "—"}
+                    </td>
+                    <td className="text-right font-mono text-sm text-wsp-muted">
+                      {person.burdened_rate != null && Number(person.burdened_rate) > 0 ? `$${Number(person.burdened_rate).toFixed(0)}` : "—"}
+                    </td>
                     <td className="text-right font-mono text-sm font-semibold text-wsp-dark">
-                      {person.hourly_rate != null ? `$${Number(person.hourly_rate).toFixed(0)}/hr` : "—"}
+                      {person.hourly_rate != null && Number(person.hourly_rate) > 0 ? `$${Number(person.hourly_rate).toFixed(0)}` : "—"}
+                    </td>
+                    <td className="text-right font-mono text-xs">
+                      {person.cost_rate != null && Number(person.cost_rate) > 0 && person.hourly_rate != null && Number(person.hourly_rate) > 0
+                        ? <span className={(Number(person.hourly_rate) / Number(person.cost_rate)) >= 3.0 ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
+                            {(Number(person.hourly_rate) / Number(person.cost_rate)).toFixed(2)}x
+                          </span>
+                        : <span className="text-wsp-border">—</span>}
                     </td>
                     <td className="text-right font-mono text-sm">{person.years_experience ?? "—"}</td>
                     <td className="text-right font-mono text-sm font-semibold text-wsp-dark">
@@ -265,7 +292,7 @@ export default function PeopleTab({ proposalId }: Props) {
                     <td>
                       <div className="flex gap-2 px-4">
                         <button onClick={() => startEdit(person)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                        <button onClick={() => deleteMutation.mutate(person.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                        <button onClick={() => window.confirm("Remove this person?") && deleteMutation.mutate(person.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
                       </div>
                     </td>
                   </>

@@ -3,10 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { pricingApi, type PricingRow } from "../../api/pricing";
 import { wbsApi, type WBSItem } from "../../api/wbs";
 import { peopleApi, type Person } from "../../api/people";
+import { usePhases } from "../../hooks/usePhases";
 
 interface Props { proposalId: string; }
-
-const PHASES = ["Study", "Preliminary", "Detailed", "Tender", "Construction"];
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
@@ -27,6 +26,7 @@ const emptyNewRow = (): NewRowState => ({
 
 export default function PricingTab({ proposalId }: Props) {
   const qc = useQueryClient();
+  const PHASES = usePhases(proposalId);
 
   // Editing an existing row
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -110,6 +110,11 @@ export default function PricingTab({ proposalId }: Props) {
 
   const saveNew = (wbsId: string) => {
     if (!newRow.person_id) return;
+    const existing = rows.find(r => r.wbs_id === wbsId && r.person_id === newRow.person_id);
+    if (existing) {
+      const personName = people.find((p: Person) => p.id === newRow.person_id)?.employee_name || "This person";
+      if (!window.confirm(`${personName} is already assigned to this WBS item. Add a duplicate row?`)) return;
+    }
     createMutation.mutate({
       wbs_id: wbsId,
       person_id: newRow.person_id,
@@ -120,6 +125,9 @@ export default function PricingTab({ proposalId }: Props) {
 
   const grandTotalHours = rows.reduce((s, r) => s + (r.total_hours || 0), 0);
   const grandTotal = rows.reduce((s, r) => s + (r.total_cost || 0), 0);
+  const grandTotalInternal = rows.reduce((s, r) => s + (r.total_cost_internal || 0), 0);
+  const grandMargin = grandTotal - grandTotalInternal;
+  const grandMarginPct = grandTotal > 0 ? (grandMargin / grandTotal) * 100 : 0;
 
   const editPreviewHours = Object.values(editValues.hours_by_phase || {})
     .reduce((s: number, v) => s + (v as number), 0);
@@ -149,8 +157,18 @@ export default function PricingTab({ proposalId }: Props) {
               <p className="font-mono font-bold text-wsp-dark text-base">{grandTotalHours}</p>
             </div>
             <div>
-              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Total Cost</p>
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Billing</p>
               <p className="font-mono font-bold text-wsp-dark text-base">{fmt(grandTotal)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Cost</p>
+              <p className="font-mono font-bold text-wsp-muted text-base">{fmt(grandTotalInternal)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Margin</p>
+              <p className={`font-mono font-bold text-base ${grandMarginPct >= 30 ? "text-emerald-600" : "text-amber-600"}`}>
+                {grandMarginPct.toFixed(0)}%
+              </p>
             </div>
           </div>
         )}
@@ -317,7 +335,7 @@ export default function PricingTab({ proposalId }: Props) {
                             <td>
                               <div className="flex gap-2 px-4">
                                 <button onClick={() => startEdit(row)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                                <button onClick={() => deleteMutation.mutate(row.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                                <button onClick={() => window.confirm("Delete this pricing row?") && deleteMutation.mutate(row.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
                               </div>
                             </td>
                           </>
@@ -413,12 +431,22 @@ export default function PricingTab({ proposalId }: Props) {
         <div className="mt-4 flex justify-end">
           <div className="wsp-card px-6 py-3 flex gap-8">
             <div className="text-right">
-              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Grand Total Hours</p>
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Total Hours</p>
               <p className="font-mono font-bold text-wsp-dark text-lg">{grandTotalHours}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Grand Total Cost</p>
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Billing Total</p>
               <p className="font-mono font-bold text-wsp-dark text-lg">{fmt(grandTotal)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Cost Total</p>
+              <p className="font-mono font-bold text-wsp-muted text-lg">{fmt(grandTotalInternal)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Net Margin</p>
+              <p className={`font-mono font-bold text-lg ${grandMarginPct >= 30 ? "text-emerald-600" : "text-amber-600"}`}>
+                {fmt(grandMargin)} ({grandMarginPct.toFixed(0)}%)
+              </p>
             </div>
           </div>
         </div>
