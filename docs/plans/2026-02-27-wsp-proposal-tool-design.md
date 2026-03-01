@@ -74,31 +74,34 @@ docker-compose up
 
 ```sql
 proposals
-  id              UUID PRIMARY KEY
-  proposal_number VARCHAR UNIQUE NOT NULL
-  title           VARCHAR NOT NULL
-  client_name     VARCHAR
-  status          ENUM (draft, in_review, submitted)
-  created_by      UUID REFERENCES users
-  created_at      TIMESTAMP
-  updated_at      TIMESTAMP
+  id                UUID PRIMARY KEY
+  proposal_number   VARCHAR UNIQUE NOT NULL
+  title             VARCHAR NOT NULL
+  client_name       VARCHAR
+  status            ENUM (draft, in_review, submitted)
+  target_dlm        FLOAT DEFAULT 3.0       -- proposal-wide DLM target
+  team_dlm_targets  JSONB DEFAULT '{}'      -- per-team targets, e.g. {"Transportation": 3.2}
+  phases            JSONB                   -- custom phases, e.g. ["Study", "Preliminary", ...]
+  created_by        UUID REFERENCES users
+  created_at        TIMESTAMP
+  updated_at        TIMESTAMP
 ```
 
 ### WBS Items (source of truth)
+
+Hours and cost are **never stored on WBS items** — they are computed server-side by aggregating pricing rows and rolling up from children to parents.
 
 ```sql
 wbs_items
   id              UUID PRIMARY KEY
   proposal_id     UUID REFERENCES proposals
-  wbs_code        VARCHAR NOT NULL  -- e.g. 1.0, 1.1, 2.3
+  wbs_code        VARCHAR NOT NULL  -- e.g. 1, 1.1, 2.3
   description     TEXT
-  phase           VARCHAR
-  hours           DECIMAL
-  unit_rate       DECIMAL
-  total_cost      DECIMAL GENERATED  -- hours * unit_rate
+  phase           VARCHAR           -- references proposal.phases
   order_index     INTEGER
   updated_by      UUID REFERENCES users
   updated_at      TIMESTAMP
+  -- Computed (not stored): total_hours, total_cost (billing), total_cost_internal (cost)
 ```
 
 ### Pricing Matrix
@@ -107,29 +110,39 @@ wbs_items
 pricing_rows
   id              UUID PRIMARY KEY
   proposal_id     UUID REFERENCES proposals
-  wbs_id          UUID REFERENCES wbs_items
-  role_title      VARCHAR
-  staff_name      VARCHAR
-  grade           VARCHAR
-  hourly_rate     DECIMAL
-  hours_by_phase  JSONB  -- { "phase1": 40, "phase2": 80, ... }
-  total_hours     DECIMAL GENERATED
-  total_cost      DECIMAL GENERATED
+  wbs_id          UUID REFERENCES wbs_items (SET NULL)
+  person_id       UUID REFERENCES proposed_people (SET NULL)
+  hourly_rate     DECIMAL           -- billing rate (auto-filled from person, read-only)
+  cost_rate       DECIMAL           -- cost rate (auto-filled from person, read-only)
+  hours_by_phase  JSONB             -- { "Study": 40, "Detailed": 80, ... }
   updated_by      UUID REFERENCES users
   updated_at      TIMESTAMP
+  -- Computed (not stored): total_hours, total_cost (billing), total_cost_internal (cost)
 ```
 
 ### Proposed People
+
+Each person carries three rates for financial tracking:
+- **cost_rate** — direct labor cost (salary-derived)
+- **burdened_rate** — cost + overhead (benefits, office, IT, etc.)
+- **hourly_rate (billing_rate)** — what the client pays
+
+DLM (Direct Labor Multiplier) = billing_rate / cost_rate (computed, not stored).
 
 ```sql
 proposed_people
   id              UUID PRIMARY KEY
   proposal_id     UUID REFERENCES proposals
   employee_name   VARCHAR
-  employee_id     VARCHAR  -- Oracle HCM ID (Phase 2)
+  employee_id     VARCHAR           -- Oracle HCM ID (Phase 2)
+  wsp_role        VARCHAR           -- e.g. "Senior Project Manager"
+  team            VARCHAR           -- e.g. "Transportation", "Environmental"
   role_on_project VARCHAR
+  hourly_rate     DECIMAL           -- billing rate (what client pays)
+  cost_rate       DECIMAL           -- direct labor cost
+  burdened_rate   DECIMAL           -- cost + overhead
   years_experience INTEGER
-  cv_path         VARCHAR  -- populated by CV-fetcher agent (Phase 2)
+  cv_path         VARCHAR           -- populated by CV-fetcher agent (Phase 2)
   updated_by      UUID REFERENCES users
   updated_at      TIMESTAMP
 ```
@@ -140,11 +153,44 @@ proposed_people
 scope_sections
   id              UUID PRIMARY KEY
   proposal_id     UUID REFERENCES proposals
+  wbs_id          UUID REFERENCES wbs_items (SET NULL)  -- optional WBS linkage
   section_name    VARCHAR
-  content         TEXT  -- rich text / markdown
+  content         TEXT              -- rich text / markdown
   order_index     INTEGER
   updated_by      UUID REFERENCES users
   updated_at      TIMESTAMP
+```
+
+### Relevant Projects
+
+```sql
+relevant_projects
+  id                  UUID PRIMARY KEY
+  proposal_id         UUID REFERENCES proposals
+  project_name        VARCHAR
+  project_number      VARCHAR
+  client              VARCHAR
+  location            VARCHAR
+  contract_value      DECIMAL
+  year_completed      VARCHAR
+  wsp_role            VARCHAR
+  project_manager     VARCHAR
+  services_performed  TEXT
+  relevance_notes     TEXT
+  key_personnel_ids   JSONB DEFAULT '[]'  -- links to proposed_people IDs
+  updated_by          UUID REFERENCES users
+  updated_at          TIMESTAMP
+```
+
+### Proposal Templates
+
+```sql
+proposal_templates
+  id              UUID PRIMARY KEY
+  name            VARCHAR UNIQUE NOT NULL
+  description     TEXT
+  template_data   JSONB           -- contains WBS items, phases, team_dlm_targets
+  created_at      TIMESTAMP
 ```
 
 ### Schedule Items
@@ -222,9 +268,10 @@ users
 WBS is the **single source of truth**. All other tabs reference it.
 
 ```
-WBS Items
+WBS Items (source of truth)
   │
-  ├──► Pricing Matrix     (cost rows per WBS item — same items, financial view)
+  ├──► Pricing Matrix     (people assigned to WBS items with hours — billing + cost view)
+  │         └──► People   (person_id FK — rates flow from person to pricing row)
   │
   ├──► Schedule           (WBS items promoted with start/end dates + dependencies)
   │         └──► Gantt    (visual render of schedule items)
@@ -232,12 +279,21 @@ WBS Items
   ├──► Deliverables       (project outputs, each linked to a WBS item)
   │         └──► Drawings (granular drawing sheets, linked to WBS + optionally Deliverable)
   │
-  └──► People             (independent — no WBS reference needed)
+  ├──► Scope Sections     (optional wbs_id FK — narrative linked to WBS)
+  │
+  └──► Relevant Projects  (key_personnel_ids links to People)
 ```
+
+**Rate flow:**
+- Person has cost_rate, burdened_rate, hourly_rate (billing)
+- When person assigned to pricing row, rates auto-fill (read-only on pricing row)
+- When person's rates updated in People tab, cascade to all their pricing rows
+- WBS totals computed from pricing: total_hours, total_cost (billing), total_cost_internal (cost)
+- Dashboard computes: net_margin, margin_%, achieved_DLM vs target_DLM
 
 **Cascade behaviour:**
 - Deleting a WBS item warns the user if linked schedule tasks, deliverables, or drawings exist
-- WBS codes autocomplete in all referencing tabs
+- Pricing rows only allowed on leaf WBS items (no children)
 - Gantt chart optionally overlays Deliverable due dates as milestone markers
 - Deliverables tab shows "Drawings (n)" count column linking to filtered Drawing List view
 
@@ -246,15 +302,21 @@ WBS Items
 ## 6. Proposal Navigation Structure
 
 ```
-Proposals List (dashboard)
-└── Proposal #XYZ — Client Name
-    ├── Overview        (scope sections — rich text)
-    ├── WBS             (editable table, source of truth)
-    ├── Pricing Matrix  (WBS-linked cost table)
-    ├── People          (proposed team members)
-    ├── Schedule        (Gantt chart + list toggle, WBS-linked)
-    ├── Deliverables    (project outputs, WBS-linked)
-    └── Drawing List    (engineering drawings, WBS + Deliverable linked)
+Proposals List
+  ├── New Proposal (blank)
+  └── New from Template (Road/Highway, Environmental Assessment, Bridge/Structure)
+
+Proposal #XYZ — Client Name
+    ├── Dashboard        (key metrics, fee summary, DLM, tab completion, settings)
+    ├── Overview         (scope sections — rich text, optional WBS linkage)
+    ├── WBS              (editable table, source of truth, auto-numbering)
+    ├── Pricing Matrix   (people assigned to leaf WBS items, billing + cost view)
+    ├── People           (team roster with cost/burdened/billing rates, DLM)
+    ├── Schedule         (Gantt chart + list toggle, WBS-linked)
+    ├── Deliverables     (project outputs, WBS-linked)
+    ├── Drawing List     (engineering drawings, WBS + Deliverable linked)
+    ├── Relevant Projects (past work, linked to key personnel)
+    └── Print Summary    (printable proposal summary page)
 ```
 
 ---
@@ -295,15 +357,19 @@ GET  /api/agents/jobs/{job_id}       -- async job polling endpoint
 
 ## 9. Sprint Plan (PoC)
 
-| Sprint | Scope |
-|--------|-------|
-| Sprint 1 | Repo setup, Docker Compose, FastAPI scaffold, React scaffold, DB migrations, JWT auth, proposal list page |
-| Sprint 2 | Proposal detail shell + tab navigation + WBS tab (full CRUD) |
-| Sprint 3 | Pricing Matrix tab + People tab + WBS cross-linking (autocomplete, cascade warnings) |
-| Sprint 4 | Schedule tab + Gantt chart (frappe-gantt) + milestone markers |
-| Sprint 5 | Deliverables tab + Drawing List tab + cross-tab relationship views |
-| Sprint 6 | Real-time WebSockets across all tabs + presence indicators |
-| Sprint 7 | CV-fetcher agent demo + UI polish + README + demo script |
+| Sprint | Scope | Status |
+|--------|-------|--------|
+| Sprint 1 | Repo setup, Docker Compose, FastAPI scaffold, React scaffold, DB migrations, JWT auth, proposal list page | Done |
+| Sprint 2 | Proposal detail shell + tab navigation + WBS tab (full CRUD) | Done |
+| Sprint 3 | Pricing Matrix tab + People tab + WBS cross-linking (autocomplete, cascade warnings) | Done |
+| Sprint 4 | Schedule tab + Gantt chart (frappe-gantt) + milestone markers | Done |
+| Sprint 5 | Deliverables tab + Drawing List tab + cross-tab relationship views | Done |
+| Sprint 6 | Real-time WebSockets across all tabs + presence indicators | Done |
+| Sprint 7 | CV-fetcher agent demo + Relevant Projects tab + UI polish | Done |
+| Sprint 8 | Financial model: cost/burdened/billing rates, DLM targets, rate cascade, custom phases, code hygiene | Planned |
+| Sprint 9 | Proposal Dashboard (metrics, fee summary, settings), custom phases UI, tab completion indicators | Planned |
+| Sprint 10 | WBS auto-numbering, Scope-WBS linkage, delete confirmations, WebSocket reconnection | Planned |
+| Sprint 11 | Proposal templates, print summary/export, Relevant Projects-People linkage, error toasts | Planned |
 
 ---
 
