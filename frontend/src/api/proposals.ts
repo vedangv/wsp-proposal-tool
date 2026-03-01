@@ -15,7 +15,7 @@ export interface Proposal {
 
 export const proposalsApi = {
   list: () => api.get<Proposal[]>("/api/proposals/").then(r => r.data),
-  create: (data: Omit<Proposal, "id" | "created_at" | "updated_at">) =>
+  create: (data: Partial<Omit<Proposal, "id" | "created_at" | "updated_at">>) =>
     api.post<Proposal>("/api/proposals/", data).then(r => r.data),
   get: (id: string) => api.get<Proposal>(`/api/proposals/${id}`).then(r => r.data),
   update: (id: string, data: Partial<Proposal>) =>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scopeApi, type ScopeSection } from "../../api/scope";
-import { wbsApi, type WBSItem } from "../../api/wbs";
+import { wbsApi } from "../../api/wbs";
 
 interface Props { proposalId: string; }
 

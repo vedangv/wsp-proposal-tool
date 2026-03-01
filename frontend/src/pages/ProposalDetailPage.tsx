@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { proposalsApi } from "../api/proposals";
-import { dashboardApi, type Dashboard } from "../api/dashboard";
+import { dashboardApi } from "../api/dashboard";
 import TabNav from "../components/tabs/TabNav";
 import DashboardTab from "../components/tabs/DashboardTab";
 import WBSTab from "../components/tabs/WBSTab";

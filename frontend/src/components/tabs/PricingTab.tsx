@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { pricingApi, type PricingRow } from "../../api/pricing";
-import { wbsApi, type WBSItem } from "../../api/wbs";
+import { wbsApi } from "../../api/wbs";
 import { peopleApi, type Person } from "../../api/people";
 import { usePhases } from "../../hooks/usePhases";
 
@@ -36,7 +36,7 @@ export default function PricingTab({ proposalId }: Props) {
   const [addingToWbs, setAddingToWbs] = useState<string | null>(null);
   const [newRow, setNewRow] = useState<NewRowState>(emptyNewRow());
 
-  const { data: rows = [], isLoading: rowsLoading } = useQuery({
+  const { data: rows = [] } = useQuery({
     queryKey: ["pricing", proposalId],
     queryFn: () => pricingApi.list(proposalId),
   });

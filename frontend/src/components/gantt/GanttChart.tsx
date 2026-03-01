@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef } from "react";
 import type { ScheduleItem } from "../../api/schedule";
 import type { WBSItem } from "../../api/wbs";
 
