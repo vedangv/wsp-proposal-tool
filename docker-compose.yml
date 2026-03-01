@@ -11,7 +11,9 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8001:8000"
     environment:
@@ -25,9 +27,13 @@ services:
       - ./backend:/app
 
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8001
     ports:
-      - "3000:5173"
+      - "3000:3000"
     environment:
       VITE_API_URL: http://localhost:8001
     depends_on:

@@ -43,7 +43,7 @@ export default function OverviewTab({ proposalId }: Props) {
   });
 
   const addMutation = useMutation({
-    mutationFn: (data?: { section_name: string; content: string }) =>
+    mutationFn: (data: { section_name: string; content: string } | undefined) =>
       scopeApi.create(proposalId, {
         section_name: data?.section_name || "New Section",
         content: data?.content || "",
@@ -133,7 +133,7 @@ export default function OverviewTab({ proposalId }: Props) {
             ) : "Fetch from RFP"}
           </button>
           <button
-            onClick={() => addMutation.mutate()}
+            onClick={() => addMutation.mutate(undefined)}
             className="text-sm text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1.5 rounded"
           >+ Add Section</button>
         </div>

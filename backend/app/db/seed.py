@@ -174,6 +174,7 @@ async def seed_demo_proposal(db: AsyncSession):
         created_by=alice_id,
     )
     db.add(proposal)
+    await db.flush()  # Flush so proposal FK is available for child records
 
     # --- People ---
     people_data = [
@@ -204,6 +205,8 @@ async def seed_demo_proposal(db: AsyncSession):
             hourly_rate=p["hourly"],
             years_experience=p["years"],
         ))
+
+    await db.flush()  # Flush people so person FKs are available
 
     # --- WBS Items (20 items from Road/Highway template) ---
     wbs_data = [
@@ -240,6 +243,8 @@ async def seed_demo_proposal(db: AsyncSession):
             phase=phase,
             order_index=idx,
         ))
+
+    await db.flush()  # Flush WBS items so wbs FKs are available
 
     # --- Pricing Rows (~2000 hours across team and WBS leaf nodes) ---
     # Only leaf WBS items get pricing rows

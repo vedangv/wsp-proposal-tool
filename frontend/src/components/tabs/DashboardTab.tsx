@@ -457,12 +457,6 @@ function ComplianceSection({ proposalId }: { proposalId: string }) {
     updateMutation.mutate({ id: item.id, data: { status: nextStatus } });
   };
 
-  const cycleStatus = (item: ComplianceItem) => {
-    const order = ["pending", "in_progress", "completed", "not_applicable"];
-    const idx = order.indexOf(item.status);
-    const next = order[(idx + 1) % order.length];
-    updateMutation.mutate({ id: item.id, data: { status: next } });
-  };
 
   return (
     <div className="mb-6">
