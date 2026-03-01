@@ -10,9 +10,11 @@ export interface PricingRow {
   person_wsp_role: string | null;
   person_team: string | null;
   hourly_rate: number;
+  cost_rate: number;
   hours_by_phase: Record<string, number>;
   total_hours: number;
   total_cost: number;
+  total_cost_internal: number;
 }
 
 export const pricingApi = {

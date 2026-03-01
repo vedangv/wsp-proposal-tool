@@ -15,6 +15,7 @@ class RelevantProjectCreate(BaseModel):
     project_manager: Optional[str] = None
     services_performed: Optional[str] = None
     relevance_notes: Optional[str] = None
+    key_personnel_ids: Optional[list[str]] = None
 
 
 class RelevantProjectUpdate(BaseModel):
@@ -28,6 +29,7 @@ class RelevantProjectUpdate(BaseModel):
     project_manager: Optional[str] = None
     services_performed: Optional[str] = None
     relevance_notes: Optional[str] = None
+    key_personnel_ids: Optional[list[str]] = None
 
 
 class RelevantProjectOut(BaseModel):
@@ -43,5 +45,6 @@ class RelevantProjectOut(BaseModel):
     project_manager: Optional[str]
     services_performed: Optional[str]
     relevance_notes: Optional[str]
+    key_personnel_ids: list[str]
 
     model_config = {"from_attributes": True}

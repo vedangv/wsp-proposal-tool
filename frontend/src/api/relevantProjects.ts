@@ -13,6 +13,7 @@ export interface RelevantProject {
   project_manager: string | null;
   services_performed: string | null;
   relevance_notes: string | null;
+  key_personnel_ids: string[];
 }
 
 export const relevantProjectsApi = {

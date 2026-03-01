@@ -7,13 +7,13 @@ class PricingRowCreate(BaseModel):
     wbs_id: Optional[UUID] = None
     person_id: Optional[UUID] = None
     hourly_rate: float = 0
+    cost_rate: float = 0
     hours_by_phase: dict = {}
 
 
 class PricingRowUpdate(BaseModel):
     wbs_id: Optional[UUID] = None
     person_id: Optional[UUID] = None
-    hourly_rate: Optional[float] = None
     hours_by_phase: Optional[dict] = None
 
 
@@ -27,8 +27,10 @@ class PricingRowOut(BaseModel):
     person_wsp_role: Optional[str]
     person_team: Optional[str]
     hourly_rate: float
+    cost_rate: float
     hours_by_phase: dict
     total_hours: float
     total_cost: float
+    total_cost_internal: float
 
     model_config = {"from_attributes": True}

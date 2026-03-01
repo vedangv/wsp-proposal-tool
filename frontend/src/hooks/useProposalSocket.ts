@@ -38,36 +38,55 @@ export function useProposalSocket({ proposalId, activeTab, onPresence }: Options
     const token = localStorage.getItem("token");
     if (!token || !proposalId) return;
 
-    const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:8001").replace("http", "ws");
-    const wsUrl = `${apiBase}/ws/proposals/${proposalId}?token=${token}&tab=${activeTabRef.current}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    let attempt = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let intentionalClose = false;
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
+    const connect = () => {
+      const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:8001").replace("http", "ws");
+      const wsUrl = `${apiBase}/ws/proposals/${proposalId}?token=${token}&tab=${activeTabRef.current}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-        if (msg.type === "presence") {
-          onPresence(msg.presence ?? {});
-          return;
+      ws.onopen = () => {
+        attempt = 0; // reset backoff on successful connection
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === "presence") {
+            onPresence(msg.presence ?? {});
+            return;
+          }
+
+          // Data change — invalidate the relevant query to trigger a refetch
+          const queryKey = msg.table ? TABLE_QUERY_KEY[msg.table] : null;
+          if (queryKey) {
+            qc.invalidateQueries({ queryKey: [queryKey, proposalId] });
+          }
+        } catch {
+          // ignore malformed frames
         }
+      };
 
-        // Data change — invalidate the relevant query to trigger a refetch
-        const queryKey = msg.table ? TABLE_QUERY_KEY[msg.table] : null;
-        if (queryKey) {
-          qc.invalidateQueries({ queryKey: [queryKey, proposalId] });
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (!intentionalClose && attempt < 10) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+          attempt++;
+          reconnectTimer = setTimeout(connect, delay);
         }
-      } catch {
-        // ignore malformed frames
-      }
+      };
     };
 
-    ws.onclose = () => {
-      wsRef.current = null;
-    };
+    connect();
 
     return () => {
-      ws.close();
+      intentionalClose = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
       wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

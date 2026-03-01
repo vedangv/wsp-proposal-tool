@@ -1,4 +1,5 @@
 const TABS = [
+  { id: "dashboard",   label: "Dashboard" },
   { id: "overview",     label: "Overview" },
   { id: "wbs",         label: "WBS" },
   { id: "pricing",     label: "Pricing Matrix" },
@@ -13,9 +14,10 @@ interface TabNavProps {
   activeTab: string;
   onChange: (tab: string) => void;
   presence?: Record<string, string[]>;
+  counts?: Record<string, number>;
 }
 
-export default function TabNav({ activeTab, onChange, presence = {} }: TabNavProps) {
+export default function TabNav({ activeTab, onChange, presence = {}, counts }: TabNavProps) {
   return (
     <div className="bg-white border-b border-wsp-border flex gap-0 px-6 overflow-x-auto">
       {TABS.map(tab => (
@@ -27,6 +29,12 @@ export default function TabNav({ activeTab, onChange, presence = {} }: TabNavPro
             ${activeTab === tab.id ? "wsp-tab-active" : "wsp-tab-inactive"}`}
         >
           {tab.label}
+          {counts && counts[tab.id] != null && counts[tab.id] > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-mono font-bold rounded-full
+              bg-wsp-bg-soft text-wsp-muted border border-wsp-border leading-none">
+              {counts[tab.id]}
+            </span>
+          )}
           {presence[tab.id]?.map(name => (
             <span
               key={name}

@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text, Numeric, ForeignKey, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.base import Base
 
 
@@ -19,5 +19,6 @@ class RelevantProject(Base):
     project_manager = Column(String, nullable=True)
     services_performed = Column(Text, nullable=True)
     relevance_notes = Column(Text, nullable=True)
+    key_personnel_ids = Column(JSONB, nullable=False, default=list, server_default="[]")
     updated_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

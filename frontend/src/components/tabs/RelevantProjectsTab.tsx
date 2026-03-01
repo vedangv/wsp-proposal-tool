@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { relevantProjectsApi, type RelevantProject } from "../../api/relevantProjects";
+import { peopleApi, type Person } from "../../api/people";
 
 interface Props { proposalId: string; }
 
@@ -19,6 +20,13 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
     queryKey: ["relevant-projects", proposalId],
     queryFn: () => relevantProjectsApi.list(proposalId),
   });
+
+  const { data: people = [] } = useQuery({
+    queryKey: ["people", proposalId],
+    queryFn: () => peopleApi.list(proposalId),
+  });
+
+  const peopleMap = Object.fromEntries(people.map((p: Person) => [p.id, p]));
 
   const createMutation = useMutation({
     mutationFn: () => relevantProjectsApi.create(proposalId, { project_name: "New Project" }),
@@ -53,11 +61,20 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
       project_manager: p.project_manager || "",
       services_performed: p.services_performed || "",
       relevance_notes: p.relevance_notes || "",
+      key_personnel_ids: p.key_personnel_ids || [],
     });
   };
 
-  const ev = (field: keyof RelevantProject, val: string | number | undefined) =>
+  const ev = (field: keyof RelevantProject, val: string | number | string[] | undefined) =>
     setEditValues(v => ({ ...v, [field]: val }));
+
+  const togglePersonnel = (personId: string) => {
+    const current = (editValues.key_personnel_ids as string[]) || [];
+    const next = current.includes(personId)
+      ? current.filter(id => id !== personId)
+      : [...current, personId];
+    ev("key_personnel_ids", next);
+  };
 
   return (
     <div>
@@ -136,6 +153,31 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
                   </div>
                 </div>
 
+                {/* Row 4: key personnel */}
+                {people.length > 0 && (
+                  <div>
+                    <label className="block text-[10px] font-display tracking-widest uppercase text-wsp-muted mb-1">Key Personnel</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {people.map((person: Person) => {
+                        const selected = ((editValues.key_personnel_ids as string[]) || []).includes(person.id);
+                        return (
+                          <button
+                            key={person.id}
+                            type="button"
+                            onClick={() => togglePersonnel(person.id)}
+                            className={`px-2.5 py-1 text-xs rounded border transition-colors
+                              ${selected
+                                ? "bg-wsp-dark text-white border-wsp-dark"
+                                : "bg-white text-wsp-muted border-wsp-border hover:border-wsp-dark hover:text-wsp-dark"}`}
+                          >
+                            {person.employee_name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => updateMutation.mutate({ id: p.id, data: editValues })}
@@ -182,6 +224,19 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
                         <span className="text-xs text-wsp-muted font-body">PM: {p.project_manager}</span>
                       )}
                     </div>
+                    {p.key_personnel_ids.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Team:</span>
+                        {p.key_personnel_ids.map(id => {
+                          const person = peopleMap[id];
+                          return (
+                            <span key={id} className="wsp-badge bg-wsp-bg-soft text-wsp-dark border border-wsp-border text-[10px]">
+                              {person ? person.employee_name : id.slice(0, 6)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -195,7 +250,7 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
                       </button>
                     )}
                     <button onClick={() => startEdit(p)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                    <button onClick={() => deleteMutation.mutate(p.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                    <button onClick={() => window.confirm("Remove this project?") && deleteMutation.mutate(p.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
                   </div>
                 </div>
 

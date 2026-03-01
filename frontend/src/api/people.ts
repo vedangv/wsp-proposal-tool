@@ -8,6 +8,8 @@ export interface Person {
   wsp_role: string | null;
   team: string | null;
   role_on_project: string | null;
+  cost_rate: number | null;
+  burdened_rate: number | null;
   hourly_rate: number | null;
   years_experience: number | null;
   cv_path: string | null;

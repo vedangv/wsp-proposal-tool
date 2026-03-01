@@ -5,6 +5,7 @@ export interface ScopeSection {
   proposal_id: string;
   section_name: string;
   content: string;
+  wbs_id: string | null;
   order_index: number;
 }
 

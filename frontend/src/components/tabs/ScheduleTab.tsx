@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scheduleApi, type ScheduleItem } from "../../api/schedule";
 import { wbsApi, type WBSItem } from "../../api/wbs";
+import { usePhases } from "../../hooks/usePhases";
 import GanttChart from "../gantt/GanttChart";
 
 interface Props { proposalId: string; }
@@ -11,6 +12,7 @@ const VIEW_MODES: ViewMode[] = ["Week", "Month", "Quarter Year"];
 
 export default function ScheduleTab({ proposalId }: Props) {
   const qc = useQueryClient();
+  const phases = usePhases(proposalId);
   const [view, setView] = useState<"gantt" | "list">("gantt");
   const [ganttMode, setGanttMode] = useState<ViewMode>("Week");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,10 +40,14 @@ export default function ScheduleTab({ proposalId }: Props) {
 
   const handleImportFromWBS = async () => {
     if (wbsItems.length === 0) return;
+    // Filter out WBS items that already have a linked schedule task
+    const linkedWbsIds = new Set(items.filter(i => i.wbs_id).map(i => i.wbs_id));
+    const newItems = wbsItems.filter((w: WBSItem) => !linkedWbsIds.has(w.id));
+    if (newItems.length === 0) return;
     setImporting(true);
     try {
       await Promise.all(
-        wbsItems.map((w: WBSItem) =>
+        newItems.map((w: WBSItem) =>
           scheduleApi.create(proposalId, {
             task_name: w.description || w.wbs_code,
             wbs_id: w.id,
@@ -180,7 +186,10 @@ export default function ScheduleTab({ proposalId }: Props) {
                           ))}
                         </select>
                       </td>
-                      <td><input className="wsp-input w-24" value={editValues.phase || ""} onChange={e => setEditValues(v => ({ ...v, phase: e.target.value }))} /></td>
+                      <td><select className="wsp-input w-28" value={editValues.phase || ""} onChange={e => setEditValues(v => ({ ...v, phase: e.target.value }))}>
+                        <option value="">—</option>
+                        {phases.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select></td>
                       <td><input type="date" className="wsp-input font-mono text-xs" value={editValues.start_date || ""} onChange={e => setEditValues(v => ({ ...v, start_date: e.target.value }))} /></td>
                       <td><input type="date" className="wsp-input font-mono text-xs" value={editValues.end_date || ""} onChange={e => setEditValues(v => ({ ...v, end_date: e.target.value }))} /></td>
                       <td><input className="wsp-input w-full" value={editValues.responsible_party || ""} onChange={e => setEditValues(v => ({ ...v, responsible_party: e.target.value }))} /></td>
@@ -217,7 +226,7 @@ export default function ScheduleTab({ proposalId }: Props) {
                       <td>
                         <div className="flex gap-2">
                           <button onClick={() => startEdit(item)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                          <button onClick={() => deleteMutation.mutate(item.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                          <button onClick={() => window.confirm("Delete this schedule task?") && deleteMutation.mutate(item.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
                         </div>
                       </td>
                     </>
