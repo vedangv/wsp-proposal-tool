@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Float, Enum, DateTime, ForeignKey, func
+from sqlalchemy import Column, String, Float, Enum, DateTime, Date, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.base import Base
 
@@ -22,6 +22,11 @@ class Proposal(Base):
     target_dlm = Column(Float, default=3.0)
     team_dlm_targets = Column(JSONB, default=dict)
     phases = Column(JSONB, default=lambda: ["Study", "Preliminary", "Detailed", "Tender", "Construction"])
+    kickoff_date = Column(Date, nullable=True)
+    red_review_date = Column(Date, nullable=True)
+    gold_review_date = Column(Date, nullable=True)
+    submission_deadline = Column(Date, nullable=True)
+    check_in_meetings = Column(JSONB, default=list)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

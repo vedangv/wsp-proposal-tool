@@ -20,11 +20,21 @@ export interface JobStatus {
   completed_at: string | null;
 }
 
+export interface RFPScopeResult {
+  section_name: string;
+  content: string;
+}
+
 export const agentsApi = {
   startCVFetch: (proposalId: string, names: string[]) =>
     api.post<{ job_id: string; status: string }>("/api/agents/cv-fetch", {
       proposal_id: proposalId,
       names,
+    }).then(r => r.data),
+
+  startRFPExtract: (proposalId: string) =>
+    api.post<{ job_id: string; status: string }>("/api/agents/rfp-extract", {
+      proposal_id: proposalId,
     }).then(r => r.data),
 
   pollJob: (jobId: string) =>

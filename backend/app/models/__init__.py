@@ -8,6 +8,8 @@ from app.models.schedule import ScheduleItem
 from app.models.deliverable import Deliverable, DeliverableType, DeliverableStatus
 from app.models.drawing import Drawing, DrawingFormat, DrawingStatus
 from app.models.relevant_project import RelevantProject
+from app.models.discipline import ProposalDiscipline, DisciplineStatus
+from app.models.compliance import ComplianceItem, ComplianceStatus
 
 __all__ = [
     "User", "UserRole",
@@ -20,4 +22,6 @@ __all__ = [
     "Deliverable", "DeliverableType", "DeliverableStatus",
     "Drawing", "DrawingFormat", "DrawingStatus",
     "RelevantProject",
+    "ProposalDiscipline", "DisciplineStatus",
+    "ComplianceItem", "ComplianceStatus",
 ]

@@ -2,36 +2,32 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { deliverablesApi, type Deliverable, type DeliverableType, type DeliverableStatus } from "../../api/deliverables";
 import { wbsApi, type WBSItem } from "../../api/wbs";
+import SlideOver from "../SlideOver";
 
 interface Props { proposalId: string; }
 
 const TYPE_LABELS: Record<DeliverableType, string> = {
-  report: "Report",
-  model: "Model",
-  specification: "Spec",
-  drawing_package: "Drawings",
-  other: "Other",
+  report: "Report", model: "Model", specification: "Spec", drawing_package: "Drawings", other: "Other",
 };
 
 const STATUS_STYLES: Record<DeliverableStatus, string> = {
-  tbd:         "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
+  tbd: "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
   in_progress: "bg-blue-50 text-blue-700 border border-blue-200",
-  complete:    "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  complete: "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 
 const STATUS_LABELS: Record<DeliverableStatus, string> = {
-  tbd: "TBD",
-  in_progress: "In Progress",
-  complete: "Complete",
+  tbd: "TBD", in_progress: "In Progress", complete: "Complete",
 };
 
 const DELIVERABLE_TYPES: DeliverableType[] = ["report", "model", "specification", "drawing_package", "other"];
-const STATUSES: DeliverableStatus[] = ["tbd", "in_progress", "complete"]; // used in edit form
+const STATUSES: DeliverableStatus[] = ["tbd", "in_progress", "complete"];
 
 export default function DeliverablesTab({ proposalId }: Props) {
   const qc = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Deliverable>>({});
+  const [slideOpen, setSlideOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Deliverable | null>(null);
+  const [formValues, setFormValues] = useState<Partial<Deliverable>>({});
 
   const { data: deliverables = [], isLoading } = useQuery({
     queryKey: ["deliverables", proposalId],
@@ -44,12 +40,11 @@ export default function DeliverablesTab({ proposalId }: Props) {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => deliverablesApi.create(proposalId, {
-      title: "New Deliverable",
-      type: "other",
-      status: "tbd",
-    }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deliverables", proposalId] }),
+    mutationFn: (data: Partial<Deliverable>) => deliverablesApi.create(proposalId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["deliverables", proposalId] });
+      setSlideOpen(false);
+    },
   });
 
   const updateMutation = useMutation({
@@ -57,7 +52,7 @@ export default function DeliverablesTab({ proposalId }: Props) {
       deliverablesApi.update(proposalId, id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["deliverables", proposalId] });
-      setEditingId(null);
+      setSlideOpen(false);
     },
   });
 
@@ -66,9 +61,15 @@ export default function DeliverablesTab({ proposalId }: Props) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["deliverables", proposalId] }),
   });
 
-  const startEdit = (d: Deliverable) => {
-    setEditingId(d.id);
-    setEditValues({
+  const openAdd = () => {
+    setEditingItem(null);
+    setFormValues({ title: "", type: "other", status: "tbd", deliverable_ref: "", responsible_party: "", due_date: "" });
+    setSlideOpen(true);
+  };
+
+  const openEdit = (d: Deliverable) => {
+    setEditingItem(d);
+    setFormValues({
       wbs_id: d.wbs_id || undefined,
       deliverable_ref: d.deliverable_ref || "",
       title: d.title,
@@ -77,6 +78,15 @@ export default function DeliverablesTab({ proposalId }: Props) {
       responsible_party: d.responsible_party || "",
       status: d.status,
     });
+    setSlideOpen(true);
+  };
+
+  const saveForm = () => {
+    if (editingItem) {
+      updateMutation.mutate({ id: editingItem.id, data: formValues });
+    } else {
+      createMutation.mutate(formValues);
+    }
   };
 
   const wbsLabel = (id: string | null) => {
@@ -87,12 +97,9 @@ export default function DeliverablesTab({ proposalId }: Props) {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-end justify-between mb-5">
         <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Deliverables</h3>
-        <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
-          + Add Deliverable
-        </button>
+        <button onClick={openAdd} className="wsp-btn-primary">+ Add Deliverable</button>
       </div>
 
       <div className="wsp-card overflow-hidden">
@@ -113,82 +120,89 @@ export default function DeliverablesTab({ proposalId }: Props) {
           <tbody>
             {deliverables.map(d => (
               <tr key={d.id}>
-                {editingId === d.id ? (
-                  <>
-                    <td><input className="wsp-input w-full font-mono text-xs" value={editValues.deliverable_ref || ""} onChange={e => setEditValues(v => ({ ...v, deliverable_ref: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full" value={editValues.title || ""} onChange={e => setEditValues(v => ({ ...v, title: e.target.value }))} /></td>
-                    <td>
-                      <select className="wsp-input w-full text-xs"
-                        value={editValues.type || "other"}
-                        onChange={e => setEditValues(v => ({ ...v, type: e.target.value as DeliverableType }))}>
-                        {DELIVERABLE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <select className="wsp-input w-full text-xs"
-                        value={editValues.wbs_id || ""}
-                        onChange={e => setEditValues(v => ({ ...v, wbs_id: e.target.value || undefined }))}>
-                        <option value="">—</option>
-                        {wbsItems.map((w: WBSItem) => (
-                          <option key={w.id} value={w.id}>{w.wbs_code} {w.description}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td><input type="date" className="wsp-input font-mono text-xs" value={editValues.due_date || ""} onChange={e => setEditValues(v => ({ ...v, due_date: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full" value={editValues.responsible_party || ""} onChange={e => setEditValues(v => ({ ...v, responsible_party: e.target.value }))} /></td>
-                    <td>
-                      <select className="wsp-input w-full text-xs"
-                        value={editValues.status || "tbd"}
-                        onChange={e => setEditValues(v => ({ ...v, status: e.target.value as DeliverableStatus }))}>
-                        {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                      </select>
-                    </td>
-                    <td />
-                    <td>
-                      <div className="flex gap-1">
-                        <button onClick={() => updateMutation.mutate({ id: d.id, data: editValues })} className="text-green-700 text-xs px-2 py-1 border border-green-300 hover:bg-green-50">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-wsp-muted text-xs px-2 py-1 border border-wsp-border hover:text-wsp-dark">✕</button>
-                      </div>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td><span className="font-mono text-wsp-red text-xs">{d.deliverable_ref || "—"}</span></td>
-                    <td className="font-body font-medium text-wsp-dark">{d.title}</td>
-                    <td>
-                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">
-                        {TYPE_LABELS[d.type]}
-                      </span>
-                    </td>
-                    <td><span className="font-mono text-wsp-red text-xs">{wbsLabel(d.wbs_id)}</span></td>
-                    <td className="font-mono text-xs text-wsp-muted">{d.due_date || "—"}</td>
-                    <td className="text-wsp-muted">{d.responsible_party || "—"}</td>
-                    <td>
-                      <span className={`wsp-badge ${STATUS_STYLES[d.status]} text-[10px]`}>
-                        {STATUS_LABELS[d.status]}
-                      </span>
-                    </td>
-                    <td>
-                      <DrawingCount proposalId={proposalId} deliverableId={d.id} />
-                    </td>
-                    <td>
-                      <div className="flex gap-2">
-                        <button onClick={() => startEdit(d)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                        <button onClick={() => window.confirm("Delete this deliverable?") && deleteMutation.mutate(d.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
-                      </div>
-                    </td>
-                  </>
-                )}
+                <td><span className="font-mono text-wsp-red text-xs">{d.deliverable_ref || "—"}</span></td>
+                <td className="font-body font-medium text-wsp-dark">{d.title}</td>
+                <td>
+                  <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">
+                    {TYPE_LABELS[d.type]}
+                  </span>
+                </td>
+                <td><span className="font-mono text-wsp-red text-xs">{wbsLabel(d.wbs_id)}</span></td>
+                <td className="font-mono text-xs text-wsp-muted">{d.due_date || "—"}</td>
+                <td className="text-wsp-muted">{d.responsible_party || "—"}</td>
+                <td>
+                  <span className={`wsp-badge ${STATUS_STYLES[d.status]} text-[10px]`}>
+                    {STATUS_LABELS[d.status]}
+                  </span>
+                </td>
+                <td><DrawingCount proposalId={proposalId} deliverableId={d.id} /></td>
+                <td>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEdit(d)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
+                    <button onClick={() => deleteMutation.mutate(d.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {deliverables.length === 0 && !isLoading && (
-          <p className="text-center py-12 text-wsp-muted text-sm font-body">
-            No deliverables yet. Add one to get started.
-          </p>
+          <p className="text-center py-12 text-wsp-muted text-sm font-body">No deliverables yet. Add one to get started.</p>
         )}
       </div>
+
+      {/* SlideOver form */}
+      <SlideOver
+        open={slideOpen}
+        onClose={() => setSlideOpen(false)}
+        title={editingItem ? `Edit — ${editingItem.title}` : "Add Deliverable"}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">Reference Code</label>
+            <input className="border rounded px-3 py-2 w-full text-sm font-mono" placeholder="e.g. D-001" value={formValues.deliverable_ref || ""} onChange={e => setFormValues(v => ({ ...v, deliverable_ref: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">Title *</label>
+            <input className="border rounded px-3 py-2 w-full text-sm" value={formValues.title || ""} onChange={e => setFormValues(v => ({ ...v, title: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">Type</label>
+            <select className="border rounded px-3 py-2 w-full text-sm" value={formValues.type || "other"} onChange={e => setFormValues(v => ({ ...v, type: e.target.value as DeliverableType }))}>
+              {DELIVERABLE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">WBS Link</label>
+            <select className="border rounded px-3 py-2 w-full text-sm" value={formValues.wbs_id || ""} onChange={e => setFormValues(v => ({ ...v, wbs_id: e.target.value || undefined }))}>
+              <option value="">— No WBS link —</option>
+              {wbsItems.map((w: WBSItem) => (
+                <option key={w.id} value={w.id}>{w.wbs_code} {w.description}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">Due Date</label>
+            <input type="date" className="border rounded px-3 py-2 w-full text-sm" value={formValues.due_date || ""} onChange={e => setFormValues(v => ({ ...v, due_date: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">Responsible Party</label>
+            <input className="border rounded px-3 py-2 w-full text-sm" value={formValues.responsible_party || ""} onChange={e => setFormValues(v => ({ ...v, responsible_party: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs text-wsp-muted block mb-1">Status</label>
+            <select className="border rounded px-3 py-2 w-full text-sm" value={formValues.status || "tbd"} onChange={e => setFormValues(v => ({ ...v, status: e.target.value as DeliverableStatus }))}>
+              {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2 pt-4 border-t">
+            <button onClick={saveForm} disabled={!formValues.title} className="wsp-btn-primary disabled:opacity-40">
+              {editingItem ? "Save Changes" : "Add Deliverable"}
+            </button>
+            <button onClick={() => setSlideOpen(false)} className="wsp-btn-ghost">Cancel</button>
+          </div>
+        </div>
+      </SlideOver>
     </div>
   );
 }

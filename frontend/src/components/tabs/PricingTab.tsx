@@ -4,6 +4,7 @@ import { pricingApi, type PricingRow } from "../../api/pricing";
 import { wbsApi } from "../../api/wbs";
 import { peopleApi, type Person } from "../../api/people";
 import { usePhases } from "../../hooks/usePhases";
+import ClickToEditCell from "../ClickToEditCell";
 
 interface Props { proposalId: string; }
 
@@ -27,10 +28,6 @@ const emptyNewRow = (): NewRowState => ({
 export default function PricingTab({ proposalId }: Props) {
   const qc = useQueryClient();
   const PHASES = usePhases(proposalId);
-
-  // Editing an existing row
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<PricingRow>>({});
 
   // Adding a new row to a specific WBS item
   const [addingToWbs, setAddingToWbs] = useState<string | null>(null);
@@ -68,7 +65,6 @@ export default function PricingTab({ proposalId }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pricing", proposalId] });
       qc.invalidateQueries({ queryKey: ["wbs", proposalId] });
-      setEditingId(null);
     },
   });
 
@@ -80,23 +76,22 @@ export default function PricingTab({ proposalId }: Props) {
     },
   });
 
-  const startEdit = (row: PricingRow) => {
-    setAddingToWbs(null);
-    setEditingId(row.id);
-    setEditValues({
-      person_id: row.person_id || undefined,
-      hourly_rate: row.hourly_rate,
-      hours_by_phase: { ...row.hours_by_phase },
-    });
+  // Click-to-edit: update a single phase hours value
+  const updatePhaseHours = (rowId: string, row: PricingRow, phase: string, value: number) => {
+    const newPhases = { ...row.hours_by_phase, [phase]: value };
+    updateMutation.mutate({ id: rowId, data: { hours_by_phase: newPhases } });
   };
 
-  const onEditPersonChange = (personId: string) => {
+  // Click-to-edit: change person on a row
+  const updatePerson = (rowId: string, personId: string) => {
     const person = people.find((p: Person) => p.id === personId);
-    setEditValues(v => ({
-      ...v,
-      person_id: personId || undefined,
-      hourly_rate: personId ? (person?.hourly_rate ?? v.hourly_rate ?? 0) : v.hourly_rate ?? 0,
-    }));
+    updateMutation.mutate({
+      id: rowId,
+      data: {
+        person_id: personId || undefined,
+        hourly_rate: person?.hourly_rate ?? 0,
+      },
+    });
   };
 
   const onNewPersonChange = (personId: string) => {
@@ -129,12 +124,7 @@ export default function PricingTab({ proposalId }: Props) {
   const grandMargin = grandTotal - grandTotalInternal;
   const grandMarginPct = grandTotal > 0 ? (grandMargin / grandTotal) * 100 : 0;
 
-  const editPreviewHours = Object.values(editValues.hours_by_phase || {})
-    .reduce((s: number, v) => s + (v as number), 0);
-  const editPreviewCost = editPreviewHours * (editValues.hourly_rate || 0);
-
-  const newPreviewHours = Object.values(newRow.hours_by_phase)
-    .reduce((s, v) => s + v, 0);
+  const newPreviewHours = Object.values(newRow.hours_by_phase).reduce((s, v) => s + v, 0);
   const newPreviewCost = newPreviewHours * newRow.hourly_rate;
 
   if (wbsLoading) return <div className="text-wsp-muted text-sm font-body py-8 text-center">Loading…</div>;
@@ -146,10 +136,9 @@ export default function PricingTab({ proposalId }: Props) {
         <div>
           <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Pricing Matrix</h3>
           <p className="text-xs text-wsp-muted font-body mt-0.5">
-            Assign team members to WBS items and enter hours · rates flow from People tab
+            Click any hours cell to edit · rates flow from People tab
           </p>
         </div>
-        {/* Grand total summary */}
         {grandTotal > 0 && (
           <div className="flex items-center gap-6 text-right">
             <div>
@@ -188,9 +177,7 @@ export default function PricingTab({ proposalId }: Props) {
           const secCost  = wbsRows.reduce((s, r) => s + r.total_cost, 0);
           const lvl = wbsLevel(wbs.wbs_code);
           const isAdding = addingToWbs === wbs.id;
-          const isLeaf = !wbsItems.some(
-            other => other.id !== wbs.id && other.wbs_code.startsWith(wbs.wbs_code + ".")
-          );
+          const isLeaf = !wbsItems.some(other => other.id !== wbs.id && other.wbs_code.startsWith(wbs.wbs_code + "."));
 
           return (
             <div key={wbs.id} className="wsp-card overflow-hidden">
@@ -199,9 +186,7 @@ export default function PricingTab({ proposalId }: Props) {
                 ${lvl === 1 ? "bg-wsp-dark" : lvl === 2 ? "bg-wsp-bg-soft border-b border-wsp-border" : "bg-white border-b border-wsp-border"}`}
               >
                 <div className="flex items-center gap-3">
-                  <span className={`font-mono text-xs tracking-wider ${lvl === 1 ? "text-wsp-red" : "text-wsp-red"}`}>
-                    {wbs.wbs_code}
-                  </span>
+                  <span className="font-mono text-xs tracking-wider text-wsp-red">{wbs.wbs_code}</span>
                   <span className={`font-display text-sm font-semibold ${lvl === 1 ? "text-white" : "text-wsp-dark"}`}>
                     {wbs.description || "—"}
                   </span>
@@ -215,45 +200,31 @@ export default function PricingTab({ proposalId }: Props) {
                 <div className="flex items-center gap-6">
                   {secHours > 0 && (
                     <div className="flex items-center gap-4 text-right">
-                      <span className={`font-mono text-sm ${lvl === 1 ? "text-white/70" : "text-wsp-muted"}`}>
-                        {secHours}h
-                      </span>
-                      <span className={`font-mono text-sm font-semibold ${lvl === 1 ? "text-white" : "text-wsp-dark"}`}>
-                        {fmt(secCost)}
-                      </span>
+                      <span className={`font-mono text-sm ${lvl === 1 ? "text-white/70" : "text-wsp-muted"}`}>{secHours}h</span>
+                      <span className={`font-mono text-sm font-semibold ${lvl === 1 ? "text-white" : "text-wsp-dark"}`}>{fmt(secCost)}</span>
                     </div>
                   )}
                   {isLeaf ? (
                     <button
                       onClick={() => {
-                        if (isAdding) {
-                          setAddingToWbs(null);
-                          setNewRow(emptyNewRow());
-                        } else {
-                          setEditingId(null);
-                          setAddingToWbs(wbs.id);
-                          setNewRow(emptyNewRow());
-                        }
+                        if (isAdding) { setAddingToWbs(null); setNewRow(emptyNewRow()); }
+                        else { setAddingToWbs(wbs.id); setNewRow(emptyNewRow()); }
                       }}
                       className={`text-xs font-display tracking-wide px-3 py-1 rounded transition-colors
-                        ${lvl === 1
-                          ? "text-white/70 hover:text-white border border-white/20 hover:bg-white/10"
-                          : "text-wsp-muted hover:text-wsp-dark border border-wsp-border hover:bg-wsp-bg-soft"
-                        }
+                        ${lvl === 1 ? "text-white/70 hover:text-white border border-white/20 hover:bg-white/10" : "text-wsp-muted hover:text-wsp-dark border border-wsp-border hover:bg-wsp-bg-soft"}
                         ${isAdding ? "bg-white/10 text-white" : ""}`}
                     >
                       {isAdding ? "✕ Cancel" : "+ Add Person"}
                     </button>
                   ) : (
-                    <span className={`text-[10px] font-display tracking-widest uppercase
-                      ${lvl === 1 ? "text-white/30" : "text-wsp-border"}`}>
+                    <span className={`text-[10px] font-display tracking-widest uppercase ${lvl === 1 ? "text-white/30" : "text-wsp-border"}`}>
                       Subtasks ↓
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Existing rows for this WBS item */}
+              {/* Rows with click-to-edit */}
               {wbsRows.length > 0 && (
                 <table className="wsp-table w-full">
                   <thead>
@@ -265,146 +236,79 @@ export default function PricingTab({ proposalId }: Props) {
                       {PHASES.map(p => <th key={p} className="text-right w-20">{p}</th>)}
                       <th className="text-right w-16">Hrs</th>
                       <th className="text-right w-28">Total</th>
-                      <th className="w-20"></th>
+                      <th className="w-12"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {wbsRows.map(row => (
                       <tr key={row.id} className="hover:bg-gray-50">
-                        {editingId === row.id ? (
-                          <>
-                            <td className="px-2 py-1">
-                              <select
-                                className="border rounded px-1 py-1 text-xs w-40"
-                                value={editValues.person_id || ""}
-                                onChange={e => onEditPersonChange(e.target.value)}
-                              >
-                                <option value="">— select person —</option>
-                                {people.map((p: Person) => (
-                                  <option key={p.id} value={p.id}>{p.employee_name}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="px-3 py-1 text-xs text-wsp-muted">
-                              {people.find((p: Person) => p.id === editValues.person_id)?.wsp_role || "—"}
-                            </td>
-                            <td className="px-3 py-1 text-xs text-wsp-muted">
-                              {people.find((p: Person) => p.id === editValues.person_id)?.team || "—"}
-                            </td>
-                            <td className="px-3 py-1 text-right font-mono text-xs text-wsp-muted">
-                              {editValues.hourly_rate ? `$${editValues.hourly_rate}/hr` : "—"}
-                            </td>
-                            {PHASES.map(p => (
-                              <td key={p} className="px-2 py-1">
-                                <input type="number" className="border rounded px-1 py-1 text-xs w-16 text-right"
-                                  value={editValues.hours_by_phase?.[p] ?? 0}
-                                  onChange={e => setEditValues(v => ({
-                                    ...v,
-                                    hours_by_phase: { ...(v.hours_by_phase || {}), [p]: parseFloat(e.target.value) || 0 }
-                                  }))} />
-                              </td>
-                            ))}
-                            <td className="px-3 py-1 text-right text-xs text-gray-400">{editPreviewHours}</td>
-                            <td className="px-3 py-1 text-right text-xs text-gray-400">{fmt(editPreviewCost)}</td>
-                            <td className="px-2 py-1">
-                              <div className="flex gap-1">
-                                <button onClick={() => updateMutation.mutate({ id: row.id, data: editValues })}
-                                  className="text-green-600 hover:text-green-800 text-xs px-2 py-1 border border-green-300 rounded">Save</button>
-                                <button onClick={() => setEditingId(null)}
-                                  className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1 border rounded">✕</button>
-                              </div>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="font-body font-medium text-sm">{row.person_name || "—"}</td>
-                            <td className="text-wsp-muted text-xs">{row.person_wsp_role || "—"}</td>
-                            <td className="text-xs">
-                              {row.person_team
-                                ? <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">{row.person_team}</span>
-                                : <span className="text-wsp-border">—</span>}
-                            </td>
-                            <td className="text-right font-mono text-sm">{fmt(row.hourly_rate)}</td>
-                            {PHASES.map(p => (
-                              <td key={p} className="text-right font-mono text-sm text-wsp-muted">
-                                {row.hours_by_phase?.[p] ?? 0}
-                              </td>
-                            ))}
-                            <td className="text-right font-mono text-sm font-semibold">{row.total_hours}</td>
-                            <td className="text-right font-mono font-semibold text-sm">{fmt(row.total_cost)}</td>
-                            <td>
-                              <div className="flex gap-2 px-4">
-                                <button onClick={() => startEdit(row)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                                <button onClick={() => window.confirm("Delete this pricing row?") && deleteMutation.mutate(row.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
-                              </div>
-                            </td>
-                          </>
-                        )}
+                        <td className="px-3 py-1.5">
+                          <PersonSelector
+                            currentName={row.person_name || "—"}
+                            people={people}
+                            onSelect={personId => updatePerson(row.id, personId)}
+                          />
+                        </td>
+                        <td className="text-wsp-muted text-xs px-3">{row.person_wsp_role || "—"}</td>
+                        <td className="text-xs px-3">
+                          {row.person_team
+                            ? <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">{row.person_team}</span>
+                            : <span className="text-wsp-border">—</span>}
+                        </td>
+                        <td className="text-right font-mono text-sm px-3">{fmt(row.hourly_rate)}</td>
+                        {PHASES.map(p => (
+                          <td key={p} className="text-right font-mono text-sm text-wsp-muted px-2">
+                            <ClickToEditCell
+                              value={row.hours_by_phase?.[p] ?? 0}
+                              onSave={val => updatePhaseHours(row.id, row, p, val)}
+                            />
+                          </td>
+                        ))}
+                        <td className="text-right font-mono text-sm font-semibold px-3">{row.total_hours}</td>
+                        <td className="text-right font-mono font-semibold text-sm px-3">{fmt(row.total_cost)}</td>
+                        <td className="px-2">
+                          <button onClick={() => deleteMutation.mutate(row.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
 
-              {/* Inline "add person" form — leaf nodes only */}
+              {/* Add person form */}
               {isAdding && isLeaf && (
                 <div className="border-t border-wsp-border bg-blue-50/30 px-4 py-3">
                   <div className="flex items-start gap-3 flex-wrap">
-                    {/* Person */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Person *</label>
-                      <select
-                        className="border rounded px-2 py-1.5 text-sm w-48 bg-white"
-                        value={newRow.person_id}
-                        onChange={e => onNewPersonChange(e.target.value)}
-                        autoFocus
-                      >
+                      <select className="border rounded px-2 py-1.5 text-sm w-48 bg-white" value={newRow.person_id} onChange={e => onNewPersonChange(e.target.value)} autoFocus>
                         <option value="">— select person —</option>
                         {people.map((p: Person) => (
-                          <option key={p.id} value={p.id}>
-                            {p.employee_name}{p.team ? ` (${p.team})` : ""}
-                          </option>
+                          <option key={p.id} value={p.id}>{p.employee_name}{p.team ? ` (${p.team})` : ""}</option>
                         ))}
                       </select>
                     </div>
-
-                    {/* Rate (auto-filled from People tab, read-only) */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Rate $/hr</label>
                       <div className="border border-wsp-border rounded px-2 py-1.5 text-sm w-24 text-right bg-wsp-bg-soft font-mono text-wsp-muted">
                         {newRow.hourly_rate ? `$${newRow.hourly_rate}` : <span className="text-wsp-border">auto</span>}
                       </div>
                     </div>
-
-                    {/* Phase hours */}
                     {PHASES.map(phase => (
                       <div key={phase} className="flex flex-col gap-1">
                         <label className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">{phase}</label>
-                        <input
-                          type="number"
-                          className="border rounded px-2 py-1.5 text-sm w-20 text-right bg-white"
-                          value={newRow.hours_by_phase[phase] ?? ""}
-                          placeholder="0"
-                          onChange={e => setNewRow(v => ({
-                            ...v,
-                            hours_by_phase: { ...v.hours_by_phase, [phase]: parseFloat(e.target.value) || 0 }
-                          }))}
-                        />
+                        <input type="number" className="border rounded px-2 py-1.5 text-sm w-20 text-right bg-white" value={newRow.hours_by_phase[phase] ?? ""} placeholder="0"
+                          onChange={e => setNewRow(v => ({ ...v, hours_by_phase: { ...v.hours_by_phase, [phase]: parseFloat(e.target.value) || 0 } }))} />
                       </div>
                     ))}
-
-                    {/* Preview + save */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Total</label>
                       <div className="flex items-center gap-2 pt-1">
                         <span className="font-mono text-sm text-wsp-muted w-24 text-right">
                           {newPreviewHours > 0 ? `${newPreviewHours}h · ${fmt(newPreviewCost)}` : "—"}
                         </span>
-                        <button
-                          onClick={() => saveNew(wbs.id)}
-                          disabled={!newRow.person_id || createMutation.isPending}
-                          className="wsp-btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
+                        <button onClick={() => saveNew(wbs.id)} disabled={!newRow.person_id || createMutation.isPending}
+                          className="wsp-btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                           {createMutation.isPending ? "Saving…" : "Add"}
                         </button>
                       </div>
@@ -413,12 +317,9 @@ export default function PricingTab({ proposalId }: Props) {
                 </div>
               )}
 
-              {/* Empty state for this WBS item */}
               {wbsRows.length === 0 && !isAdding && (
                 <div className="px-4 py-3 text-xs text-wsp-muted font-body italic">
-                  {isLeaf
-                    ? "No team members assigned — click \"+\u00a0Add Person\" to assign hours"
-                    : "Totals rolled up from subtasks"}
+                  {isLeaf ? "No team members assigned — click \"+ Add Person\" to assign hours" : "Totals rolled up from subtasks"}
                 </div>
               )}
             </div>
@@ -452,5 +353,40 @@ export default function PricingTab({ proposalId }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+/* Inline person selector — click name to open dropdown */
+function PersonSelector({ currentName, people, onSelect }: {
+  currentName: string;
+  people: Person[];
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (open) {
+    return (
+      <select
+        className="border border-blue-400 rounded px-1 py-0.5 text-xs w-40 bg-white"
+        autoFocus
+        defaultValue=""
+        onChange={e => { onSelect(e.target.value); setOpen(false); }}
+        onBlur={() => setOpen(false)}
+      >
+        <option value="">— select person —</option>
+        {people.map(p => (
+          <option key={p.id} value={p.id}>{p.employee_name}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <span
+      onClick={() => setOpen(true)}
+      className="font-body font-medium text-sm cursor-pointer hover:text-blue-600 transition-colors"
+    >
+      {currentName}
+    </span>
   );
 }

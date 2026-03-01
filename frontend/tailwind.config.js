@@ -21,6 +21,15 @@ export default {
         body:    ["'Barlow'", "sans-serif"],
         mono:    ["'JetBrains Mono'", "monospace"],
       },
+      keyframes: {
+        slideIn: {
+          from: { transform: "translateX(100%)" },
+          to:   { transform: "translateX(0)" },
+        },
+      },
+      animation: {
+        slideIn: "slideIn 0.2s ease-out",
+      },
     },
   },
   plugins: [],

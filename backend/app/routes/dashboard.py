@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func
@@ -15,6 +16,8 @@ from app.models.deliverable import Deliverable
 from app.models.drawing import Drawing
 from app.models.scope import ScopeSection
 from app.models.relevant_project import RelevantProject
+from app.models.discipline import ProposalDiscipline
+from app.models.compliance import ComplianceItem
 from app.schemas.dashboard import DashboardOut
 
 router = APIRouter(prefix="/api/proposals/{proposal_id}/dashboard", tags=["dashboard"])
@@ -26,10 +29,21 @@ async def get_dashboard(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    # Proposal for target_dlm
+    # Proposal for target_dlm + timeline
     prop_result = await db.execute(select(Proposal).where(Proposal.id == proposal_id))
     proposal = prop_result.scalar_one_or_none()
     target_dlm = float(proposal.target_dlm or 3.0) if proposal else 3.0
+
+    # Timeline fields
+    kickoff_date = str(proposal.kickoff_date) if proposal and proposal.kickoff_date else None
+    red_review_date = str(proposal.red_review_date) if proposal and proposal.red_review_date else None
+    gold_review_date = str(proposal.gold_review_date) if proposal and proposal.gold_review_date else None
+    submission_deadline = str(proposal.submission_deadline) if proposal and proposal.submission_deadline else None
+    check_in_meetings = proposal.check_in_meetings if proposal and proposal.check_in_meetings else []
+    days_remaining = None
+    if proposal and proposal.submission_deadline:
+        delta = proposal.submission_deadline - date.today()
+        days_remaining = delta.days
 
     # Pricing rows with person join for burdened_rate
     pricing_result = await db.execute(
@@ -71,6 +85,9 @@ async def get_dashboard(
     scope_count = await count_table(ScopeSection)
     rp_count = await count_table(RelevantProject)
 
+    disciplines_count = await count_table(ProposalDiscipline)
+    compliance_count = await count_table(ComplianceItem)
+
     # Schedule date range
     sched_result = await db.execute(
         select(
@@ -94,6 +111,12 @@ async def get_dashboard(
         total_hours=round(total_hours, 1),
         schedule_start=schedule_start,
         schedule_end=schedule_end,
+        kickoff_date=kickoff_date,
+        red_review_date=red_review_date,
+        gold_review_date=gold_review_date,
+        submission_deadline=submission_deadline,
+        check_in_meetings=check_in_meetings,
+        days_remaining=days_remaining,
         wbs_count=wbs_count,
         pricing_count=pricing_count,
         people_count=people_count,
@@ -102,4 +125,6 @@ async def get_dashboard(
         drawings_count=drawings_count,
         scope_count=scope_count,
         relevant_projects_count=rp_count,
+        disciplines_count=disciplines_count,
+        compliance_count=compliance_count,
     )

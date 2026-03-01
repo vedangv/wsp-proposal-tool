@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -27,7 +28,23 @@ async def create_proposal(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    proposal = Proposal(**body.model_dump(), created_by=current_user.id)
+    data = body.model_dump()
+    # Apply default timeline dates if not provided
+    today = date.today()
+    if data.get("kickoff_date") is None:
+        data["kickoff_date"] = today
+    if data.get("red_review_date") is None:
+        data["red_review_date"] = today + timedelta(days=7)
+    if data.get("gold_review_date") is None:
+        data["gold_review_date"] = today + timedelta(days=10)
+    if data.get("submission_deadline") is None:
+        data["submission_deadline"] = today + timedelta(days=14)
+    if data.get("check_in_meetings") is None:
+        data["check_in_meetings"] = []
+    else:
+        data["check_in_meetings"] = [m if isinstance(m, dict) else m.model_dump() for m in data["check_in_meetings"]]
+
+    proposal = Proposal(**data, created_by=current_user.id)
     db.add(proposal)
     await db.commit()
     await db.refresh(proposal)
@@ -58,7 +75,12 @@ async def update_proposal(
     proposal = result.scalar_one_or_none()
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
-    for field, value in body.model_dump(exclude_none=True).items():
+    update_data = body.model_dump(exclude_none=True)
+    if "check_in_meetings" in update_data and update_data["check_in_meetings"] is not None:
+        update_data["check_in_meetings"] = [
+            m if isinstance(m, dict) else m.model_dump() for m in update_data["check_in_meetings"]
+        ]
+    for field, value in update_data.items():
         setattr(proposal, field, value)
     await db.commit()
     await db.refresh(proposal)

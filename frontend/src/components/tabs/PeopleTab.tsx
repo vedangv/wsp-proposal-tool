@@ -4,6 +4,7 @@ import { peopleApi, type Person } from "../../api/people";
 import { pricingApi } from "../../api/pricing";
 import { agentsApi, type CVResult } from "../../api/agents";
 import CVCard from "../CVCard";
+import SlideOver from "../SlideOver";
 
 interface Props { proposalId: string; }
 
@@ -11,8 +12,9 @@ type FetchState = "idle" | "fetching" | "done" | "error";
 
 export default function PeopleTab({ proposalId }: Props) {
   const qc = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Person>>({});
+  const [slideOpen, setSlideOpen] = useState(false);
+  const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+  const [formValues, setFormValues] = useState<Partial<Person>>({});
   const [fetchState, setFetchState] = useState<FetchState>("idle");
   const [cvResults, setCvResults] = useState<CVResult[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -34,8 +36,11 @@ export default function PeopleTab({ proposalId }: Props) {
   }, {});
 
   const createMutation = useMutation({
-    mutationFn: () => peopleApi.create(proposalId, { employee_name: "New Person" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["people", proposalId] }),
+    mutationFn: (data: Partial<Person>) => peopleApi.create(proposalId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["people", proposalId] });
+      setSlideOpen(false);
+    },
   });
 
   const updateMutation = useMutation({
@@ -44,8 +49,7 @@ export default function PeopleTab({ proposalId }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people", proposalId] });
       qc.invalidateQueries({ queryKey: ["pricing", proposalId] });
-      qc.invalidateQueries({ queryKey: ["wbs", proposalId] });
-      setEditingId(null);
+      setSlideOpen(false);
     },
   });
 
@@ -54,9 +58,15 @@ export default function PeopleTab({ proposalId }: Props) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["people", proposalId] }),
   });
 
-  const startEdit = (p: Person) => {
-    setEditingId(p.id);
-    setEditValues({
+  const openAdd = () => {
+    setEditingPerson(null);
+    setFormValues({ employee_name: "" });
+    setSlideOpen(true);
+  };
+
+  const openEdit = (p: Person) => {
+    setEditingPerson(p);
+    setFormValues({
       employee_name: p.employee_name,
       employee_id: p.employee_id || "",
       wsp_role: p.wsp_role || "",
@@ -67,19 +77,28 @@ export default function PeopleTab({ proposalId }: Props) {
       hourly_rate: p.hourly_rate ?? undefined,
       years_experience: p.years_experience ?? undefined,
     });
+    setSlideOpen(true);
   };
 
-  const saveEdit = (id: string) => updateMutation.mutate({ id, data: editValues });
+  const saveForm = () => {
+    if (editingPerson) {
+      updateMutation.mutate({ id: editingPerson.id, data: formValues });
+    } else {
+      createMutation.mutate(formValues);
+    }
+  };
 
-  // Apply CV result → update person record then re-query
-  const applyCV = async (cv: CVResult, personId?: string) => {
-    const target = personId
-      ? people.find(p => p.id === personId)
-      : people.find(p =>
-          p.employee_name.toLowerCase().includes(cv.requested_name.toLowerCase()) ||
-          cv.employee_name.toLowerCase().includes(p.employee_name.toLowerCase().split(" ")[0])
-        );
+  // DLM calculation
+  const dlm = formValues.cost_rate && formValues.hourly_rate && Number(formValues.cost_rate) > 0
+    ? (Number(formValues.hourly_rate) / Number(formValues.cost_rate)).toFixed(2)
+    : null;
 
+  // Apply CV result
+  const applyCV = async (cv: CVResult) => {
+    const target = people.find(p =>
+      p.employee_name.toLowerCase().includes(cv.requested_name.toLowerCase()) ||
+      cv.employee_name.toLowerCase().includes(p.employee_name.toLowerCase().split(" ")[0])
+    );
     if (target) {
       await peopleApi.update(proposalId, target.id, {
         employee_id: cv.employee_id,
@@ -103,14 +122,11 @@ export default function PeopleTab({ proposalId }: Props) {
 
   const handleFetchCVs = async () => {
     const names = people.map(p => p.employee_name).filter(Boolean);
-
     setFetchState("fetching");
     setCvResults([]);
     setDismissed(new Set());
-
     try {
       const { job_id } = await agentsApi.startCVFetch(proposalId, names);
-
       pollRef.current = setInterval(async () => {
         const job = await agentsApi.pollJob(job_id);
         if (job.status === "complete" && job.result) {
@@ -127,7 +143,6 @@ export default function PeopleTab({ proposalId }: Props) {
     }
   };
 
-  // Cleanup poll on unmount
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const visibleResults = cvResults.filter(cv => !dismissed.has(cv.employee_id));
@@ -146,7 +161,7 @@ export default function PeopleTab({ proposalId }: Props) {
         </div>
         <div className="flex gap-2 items-center">
           {fetchState === "error" && (
-            <span className="text-xs text-wsp-red font-body">Fetch failed — try again</span>
+            <span className="text-xs text-wsp-red font-body">Fetch failed</span>
           )}
           <button
             onClick={handleFetchCVs}
@@ -161,34 +176,26 @@ export default function PeopleTab({ proposalId }: Props) {
               </>
             ) : "Fetch CVs"}
           </button>
-          <button onClick={() => createMutation.mutate()} className="wsp-btn-ghost">
+          <button onClick={openAdd} className="wsp-btn-ghost">
             + Add Person
           </button>
         </div>
       </div>
 
-      {/* CV results panel */}
+      {/* CV results */}
       {fetchState !== "idle" && visibleResults.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-display font-semibold tracking-widest uppercase text-wsp-muted">
               CV Results — {visibleResults.length} match{visibleResults.length !== 1 ? "es" : ""}
             </p>
-            <button
-              onClick={() => { setFetchState("idle"); setCvResults([]); setDismissed(new Set()); }}
-              className="text-xs text-wsp-muted hover:text-wsp-dark font-body"
-            >
+            <button onClick={() => { setFetchState("idle"); setCvResults([]); setDismissed(new Set()); }} className="text-xs text-wsp-muted hover:text-wsp-dark">
               Clear all
             </button>
           </div>
           <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
             {visibleResults.map(cv => (
-              <CVCard
-                key={cv.employee_id}
-                cv={cv}
-                onApply={cv => applyCV(cv)}
-                onDismiss={() => dismissCV(cv.employee_id)}
-              />
+              <CVCard key={cv.employee_id} cv={cv} onApply={cv => applyCV(cv)} onDismiss={() => dismissCV(cv.employee_id)} />
             ))}
           </div>
         </div>
@@ -197,116 +204,176 @@ export default function PeopleTab({ proposalId }: Props) {
       {fetchState === "fetching" && cvResults.length === 0 && (
         <div className="wsp-card p-6 mb-6 flex items-center gap-3">
           <span className="w-4 h-4 border-2 border-wsp-border border-t-wsp-red rounded-full animate-spin" />
-          <span className="text-sm text-wsp-muted font-body">
-            Searching HR system for CVs…
-          </span>
+          <span className="text-sm text-wsp-muted font-body">Searching HR system for CVs…</span>
         </div>
       )}
 
-      {/* People table */}
-      <div className="wsp-card overflow-x-auto">
-        <table className="wsp-table w-full min-w-max">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th className="w-32">Employee ID</th>
-              <th>WSP Role</th>
-              <th className="w-36">Team / Discipline</th>
-              <th>Role on Project</th>
-              <th className="text-right w-24">Cost ($/hr)</th>
-              <th className="text-right w-24">Burdened</th>
-              <th className="text-right w-24">Billing</th>
-              <th className="text-right w-16">DLM</th>
-              <th className="text-right w-24">Exp (yrs)</th>
-              <th className="text-right w-24">Total Hrs</th>
-              <th className="w-24">CV</th>
-              <th className="w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {people.map(person => (
-              <tr key={person.id}>
-                {editingId === person.id ? (
-                  <>
-                    <td><input className="wsp-input w-full" value={editValues.employee_name || ""} onChange={e => setEditValues(v => ({ ...v, employee_name: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full font-mono text-xs" value={editValues.employee_id || ""} onChange={e => setEditValues(v => ({ ...v, employee_id: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full text-xs" placeholder="e.g. Senior Project Manager" value={editValues.wsp_role || ""} onChange={e => setEditValues(v => ({ ...v, wsp_role: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full text-xs" placeholder="e.g. Transportation" value={editValues.team || ""} onChange={e => setEditValues(v => ({ ...v, team: e.target.value }))} /></td>
-                    <td><input className="wsp-input w-full text-xs" placeholder="Role on this proposal" value={editValues.role_on_project || ""} onChange={e => setEditValues(v => ({ ...v, role_on_project: e.target.value }))} /></td>
-                    <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.cost_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, cost_rate: parseFloat(e.target.value) || undefined }))} /></td>
-                    <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.burdened_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, burdened_rate: parseFloat(e.target.value) || undefined }))} /></td>
-                    <td><input type="number" className="wsp-input w-full text-right" placeholder="0.00" value={editValues.hourly_rate ?? ""} onChange={e => setEditValues(v => ({ ...v, hourly_rate: parseFloat(e.target.value) || undefined }))} /></td>
-                    <td className="text-right font-mono text-xs text-wsp-muted px-3">
-                      {editValues.cost_rate && editValues.hourly_rate
-                        ? (Number(editValues.hourly_rate) / Number(editValues.cost_rate)).toFixed(2)
-                        : "—"}
-                    </td>
-                    <td><input type="number" className="wsp-input w-full text-right" value={editValues.years_experience ?? ""} onChange={e => setEditValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} /></td>
-                    <td className="text-right font-mono text-sm text-wsp-muted px-3">
-                      {hoursByPerson[person.id] ? `${hoursByPerson[person.id]}h` : "—"}
-                    </td>
-                    <td className="text-xs text-wsp-muted">{person.cv_path ? "✓ on file" : "—"}</td>
-                    <td>
-                      <div className="flex gap-1 px-2">
-                        <button onClick={() => saveEdit(person.id)} className="text-green-700 text-xs px-2 py-1 border border-green-300 hover:bg-green-50">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-wsp-muted text-xs px-2 py-1 border border-wsp-border">✕</button>
-                      </div>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="font-medium text-wsp-dark">{person.employee_name}</td>
-                    <td className="font-mono text-wsp-red text-xs">{person.employee_id || "—"}</td>
-                    <td className="text-wsp-muted text-xs">{person.wsp_role || "—"}</td>
-                    <td className="text-xs">
-                      {person.team
-                        ? <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">{person.team}</span>
-                        : <span className="text-wsp-border">—</span>}
-                    </td>
-                    <td className="text-wsp-muted text-xs">{person.role_on_project || "—"}</td>
-                    <td className="text-right font-mono text-sm text-wsp-muted">
-                      {person.cost_rate != null && Number(person.cost_rate) > 0 ? `$${Number(person.cost_rate).toFixed(0)}` : "—"}
-                    </td>
-                    <td className="text-right font-mono text-sm text-wsp-muted">
-                      {person.burdened_rate != null && Number(person.burdened_rate) > 0 ? `$${Number(person.burdened_rate).toFixed(0)}` : "—"}
-                    </td>
-                    <td className="text-right font-mono text-sm font-semibold text-wsp-dark">
-                      {person.hourly_rate != null && Number(person.hourly_rate) > 0 ? `$${Number(person.hourly_rate).toFixed(0)}` : "—"}
-                    </td>
-                    <td className="text-right font-mono text-xs">
-                      {person.cost_rate != null && Number(person.cost_rate) > 0 && person.hourly_rate != null && Number(person.hourly_rate) > 0
-                        ? <span className={(Number(person.hourly_rate) / Number(person.cost_rate)) >= 3.0 ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
-                            {(Number(person.hourly_rate) / Number(person.cost_rate)).toFixed(2)}x
-                          </span>
-                        : <span className="text-wsp-border">—</span>}
-                    </td>
-                    <td className="text-right font-mono text-sm">{person.years_experience ?? "—"}</td>
-                    <td className="text-right font-mono text-sm font-semibold text-wsp-dark">
-                      {hoursByPerson[person.id] ? `${hoursByPerson[person.id]}h` : <span className="text-wsp-border font-normal">—</span>}
-                    </td>
-                    <td className="text-xs">
-                      {person.cv_path
-                        ? <span className="text-emerald-600 font-display tracking-wide text-[10px] uppercase">✓ on file</span>
-                        : <span className="text-wsp-border">—</span>}
-                    </td>
-                    <td>
-                      <div className="flex gap-2 px-4">
-                        <button onClick={() => startEdit(person)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
-                        <button onClick={() => window.confirm("Remove this person?") && deleteMutation.mutate(person.id)} className="text-wsp-red/60 hover:text-wsp-red text-xs">Del</button>
-                      </div>
-                    </td>
-                  </>
+      {/* Card grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {people.map(person => {
+          const personDlm = person.cost_rate && person.hourly_rate && Number(person.cost_rate) > 0
+            ? (Number(person.hourly_rate) / Number(person.cost_rate)).toFixed(2)
+            : null;
+          const hours = hoursByPerson[person.id] || 0;
+
+          return (
+            <div key={person.id} className="wsp-card p-4 hover:shadow-md transition-shadow cursor-pointer group" onClick={() => openEdit(person)}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-display font-semibold text-wsp-dark text-sm">{person.employee_name}</h4>
+                    {person.team && (
+                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">
+                        {person.team}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-wsp-muted">{person.role_on_project || person.wsp_role || "No role set"}</p>
+                  {person.employee_id && (
+                    <p className="text-[10px] font-mono text-wsp-red mt-0.5">{person.employee_id}</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  {personDlm && (
+                    <span className={`font-mono font-bold text-sm ${Number(personDlm) >= 3.0 ? "text-emerald-600" : "text-amber-600"}`}>
+                      {personDlm}x
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+                <div className="text-xs">
+                  <span className="text-wsp-muted">Cost </span>
+                  <span className="font-mono font-semibold">{person.cost_rate ? `$${Number(person.cost_rate).toFixed(0)}` : "—"}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-wsp-muted">Burdened </span>
+                  <span className="font-mono font-semibold">{person.burdened_rate ? `$${Number(person.burdened_rate).toFixed(0)}` : "—"}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-wsp-muted">Billing </span>
+                  <span className="font-mono font-bold text-wsp-dark">{person.hourly_rate ? `$${Number(person.hourly_rate).toFixed(0)}` : "—"}</span>
+                </div>
+                <div className="ml-auto text-xs">
+                  <span className="text-wsp-muted">Hours </span>
+                  <span className="font-mono font-semibold">{hours || "—"}</span>
+                </div>
+                {person.years_experience && (
+                  <div className="text-xs">
+                    <span className="text-wsp-muted">Exp </span>
+                    <span className="font-mono">{person.years_experience}yr</span>
+                  </div>
                 )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {people.length === 0 && !isLoading && (
-          <p className="text-center py-12 text-wsp-muted text-sm font-body">
-            No team members yet. Add one or use Fetch CVs.
-          </p>
-        )}
+              </div>
+
+              {/* Delete button - visible on hover */}
+              <button
+                onClick={e => { e.stopPropagation(); deleteMutation.mutate(person.id); }}
+                className="absolute top-2 right-2 text-red-400 hover:text-red-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                &times;
+              </button>
+            </div>
+          );
+        })}
       </div>
+
+      {people.length === 0 && !isLoading && (
+        <div className="wsp-card p-12 text-center">
+          <p className="text-wsp-muted text-sm font-body">No team members yet. Add one or use Fetch CVs.</p>
+        </div>
+      )}
+
+      {/* SlideOver form */}
+      <SlideOver
+        open={slideOpen}
+        onClose={() => setSlideOpen(false)}
+        title={editingPerson ? `Edit — ${editingPerson.employee_name}` : "Add Team Member"}
+      >
+        <div className="space-y-5">
+          {/* Identity */}
+          <div>
+            <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted mb-2">Identity</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Full Name *</label>
+                <input className="border rounded px-3 py-2 w-full text-sm" value={formValues.employee_name || ""} onChange={e => setFormValues(v => ({ ...v, employee_name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Employee ID</label>
+                <input className="border rounded px-3 py-2 w-full text-sm font-mono" value={formValues.employee_id || ""} onChange={e => setFormValues(v => ({ ...v, employee_id: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+
+          {/* Role */}
+          <div>
+            <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted mb-2">Role</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">WSP Role</label>
+                <input className="border rounded px-3 py-2 w-full text-sm" placeholder="e.g. Senior Project Manager" value={formValues.wsp_role || ""} onChange={e => setFormValues(v => ({ ...v, wsp_role: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Team / Discipline</label>
+                <input className="border rounded px-3 py-2 w-full text-sm" placeholder="e.g. Transportation" value={formValues.team || ""} onChange={e => setFormValues(v => ({ ...v, team: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Role on This Proposal</label>
+                <input className="border rounded px-3 py-2 w-full text-sm" placeholder="e.g. Lead Designer" value={formValues.role_on_project || ""} onChange={e => setFormValues(v => ({ ...v, role_on_project: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+
+          {/* Rates */}
+          <div>
+            <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted mb-2">Rates ($/hr)</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Cost</label>
+                <input type="number" className="border rounded px-3 py-2 w-full text-sm text-right" placeholder="0" value={formValues.cost_rate ?? ""} onChange={e => setFormValues(v => ({ ...v, cost_rate: parseFloat(e.target.value) || undefined }))} />
+              </div>
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Burdened</label>
+                <input type="number" className="border rounded px-3 py-2 w-full text-sm text-right" placeholder="0" value={formValues.burdened_rate ?? ""} onChange={e => setFormValues(v => ({ ...v, burdened_rate: parseFloat(e.target.value) || undefined }))} />
+              </div>
+              <div>
+                <label className="text-xs text-wsp-muted block mb-1">Billing</label>
+                <input type="number" className="border rounded px-3 py-2 w-full text-sm text-right" placeholder="0" value={formValues.hourly_rate ?? ""} onChange={e => setFormValues(v => ({ ...v, hourly_rate: parseFloat(e.target.value) || undefined }))} />
+              </div>
+            </div>
+            {dlm && (
+              <p className="text-xs text-wsp-muted mt-2">
+                DLM: <span className={`font-mono font-bold ${Number(dlm) >= 3.0 ? "text-emerald-600" : "text-amber-600"}`}>{dlm}x</span>
+              </p>
+            )}
+          </div>
+
+          {/* Experience */}
+          <div>
+            <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted mb-2">Experience</p>
+            <div>
+              <label className="text-xs text-wsp-muted block mb-1">Years of Experience</label>
+              <input type="number" className="border rounded px-3 py-2 w-32 text-sm text-right" value={formValues.years_experience ?? ""} onChange={e => setFormValues(v => ({ ...v, years_experience: parseInt(e.target.value) || undefined }))} />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-4 border-t">
+            <button
+              onClick={saveForm}
+              disabled={!formValues.employee_name}
+              className="wsp-btn-primary disabled:opacity-40"
+            >
+              {editingPerson ? "Save Changes" : "Add Person"}
+            </button>
+            <button onClick={() => setSlideOpen(false)} className="wsp-btn-ghost">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </SlideOver>
     </div>
   );
 }

@@ -1,5 +1,10 @@
 import api from "./client";
 
+export interface CheckInMeeting {
+  date: string;
+  notes: string;
+}
+
 export interface Proposal {
   id: string;
   proposal_number: string;
@@ -9,6 +14,11 @@ export interface Proposal {
   target_dlm: number | null;
   team_dlm_targets: Record<string, number> | null;
   phases: string[] | null;
+  kickoff_date: string | null;
+  red_review_date: string | null;
+  gold_review_date: string | null;
+  submission_deadline: string | null;
+  check_in_meetings: CheckInMeeting[] | null;
   created_at: string;
   updated_at: string;
 }

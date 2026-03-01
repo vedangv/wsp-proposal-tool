@@ -35,12 +35,12 @@ export default function TabNav({ activeTab, onChange, presence = {}, counts }: T
               {counts[tab.id]}
             </span>
           )}
-          {presence[tab.id]?.map(name => (
+          {tab.id !== "dashboard" && presence[tab.id]?.map(name => (
             <span
               key={name}
               title={name}
-              className="w-5 h-5 rounded-full bg-wsp-red text-white text-[10px]
-                         flex items-center justify-center font-bold"
+              className="w-4 h-4 rounded-full bg-green-500 text-white text-[9px]
+                         flex items-center justify-center font-bold ring-2 ring-white"
             >
               {name[0].toUpperCase()}
             </span>

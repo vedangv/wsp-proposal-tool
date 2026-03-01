@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.auth.deps import get_current_user
 from app.models.user import User
-from app.agents import cv_fetcher
+from app.agents import cv_fetcher, rfp_extractor
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -21,6 +21,10 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 class CVFetchRequest(BaseModel):
     proposal_id: str
     names: list[str]
+
+
+class RFPExtractRequest(BaseModel):
+    proposal_id: str
 
 
 class JobStatusOut(BaseModel):
@@ -46,12 +50,26 @@ async def start_cv_fetch(
     return {"job_id": job_id, "status": "pending"}
 
 
+@router.post("/rfp-extract", status_code=202)
+async def start_rfp_extract(
+    body: RFPExtractRequest,
+    _: User = Depends(get_current_user),
+):
+    """
+    Kick off RFP extraction to pull scope sections from an RFP document.
+    Returns job_id immediately; poll /api/agents/jobs/{job_id} for results.
+    """
+    job_id = rfp_extractor.create_job(body.proposal_id)
+    asyncio.get_event_loop().run_in_executor(None, rfp_extractor.run_job, job_id)
+    return {"job_id": job_id, "status": "pending"}
+
+
 @router.get("/jobs/{job_id}", response_model=JobStatusOut)
 async def get_job_status(
     job_id: str,
     _: User = Depends(get_current_user),
 ):
-    job = cv_fetcher.get_job(job_id)
+    job = cv_fetcher.get_job(job_id) or rfp_extractor.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     return JobStatusOut(

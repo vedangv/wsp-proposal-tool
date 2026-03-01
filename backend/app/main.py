@@ -3,9 +3,9 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, proposals, wbs, pricing, people, scope, schedule, deliverables, drawings, agents, relevant_projects, dashboard, templates
+from app.routes import auth, proposals, wbs, pricing, people, scope, schedule, deliverables, drawings, agents, relevant_projects, dashboard, templates, disciplines, compliance
 from app.db.session import AsyncSessionLocal
-from app.db.seed import seed_users, seed_templates
+from app.db.seed import seed_users, seed_templates, seed_demo_proposal
 from app.websockets.manager import manager
 from app.auth.jwt import decode_token
 
@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_users(db)
         await seed_templates(db)
+        await seed_demo_proposal(db)
     yield
 
 
@@ -42,6 +43,8 @@ app.include_router(drawings.router)
 app.include_router(relevant_projects.router)
 app.include_router(dashboard.router)
 app.include_router(templates.router)
+app.include_router(disciplines.router)
+app.include_router(compliance.router)
 app.include_router(agents.router)
 
 
