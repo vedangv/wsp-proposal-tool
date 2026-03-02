@@ -23,8 +23,6 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 480
     depends_on:
       - db
-    volumes:
-      - ./backend:/app
 
   frontend:
     build:
@@ -34,13 +32,8 @@ services:
         VITE_API_URL: http://localhost:8001
     ports:
       - "3000:3000"
-    environment:
-      VITE_API_URL: http://localhost:8001
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
 
 volumes:
   pgdata:
