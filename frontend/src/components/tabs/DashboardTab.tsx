@@ -42,9 +42,16 @@ function MetricCard({ label, value, sub, color = "default" }: MetricCardProps) {
   );
 }
 
-/* ── Timeline Section (Calendar View) ────────────── */
+/* ── Timeline Section (Full Calendar View) ────────── */
 
-const MILESTONE_BG: Record<string, string> = {
+const MILESTONE_PILL: Record<string, string> = {
+  kickoff_date: "bg-blue-100 text-blue-700 border-blue-200",
+  red_review_date: "bg-red-100 text-red-700 border-red-200",
+  gold_review_date: "bg-amber-100 text-amber-700 border-amber-200",
+  submission_deadline: "bg-emerald-100 text-emerald-700 border-emerald-200",
+};
+
+const MILESTONE_DOT: Record<string, string> = {
   kickoff_date: "bg-blue-500",
   red_review_date: "bg-wsp-red",
   gold_review_date: "bg-amber-500",
@@ -55,7 +62,7 @@ const MILESTONE_LABELS: Record<string, string> = {
   kickoff_date: "Kickoff",
   red_review_date: "Red Review",
   gold_review_date: "Gold Review",
-  submission_deadline: "Submission",
+  submission_deadline: "Submission Deadline",
 };
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -103,8 +110,8 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
 
   const checkins: { date: string; notes: string }[] = dash.check_in_meetings || [];
 
-  // Build a lookup: dateStr → events
-  const dateEvents: Record<string, { type: "milestone"; key: string; label: string }[] | { type: "checkin"; notes: string }[]> = {};
+  // Build lookup: dateStr → events
+  const dateEvents: Record<string, any[]> = {};
   const addEvent = (dateStr: string, event: any) => {
     if (!dateEvents[dateStr]) dateEvents[dateStr] = [];
     dateEvents[dateStr].push(event);
@@ -130,11 +137,6 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
-
-  const formatDate = (d: string | null) => {
-    if (!d) return "—";
-    return new Date(d + "T00:00:00").toLocaleDateString("en-CA", { month: "short", day: "numeric" });
-  };
 
   const openEdit = () => {
     setFormDates({
@@ -167,8 +169,9 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
   };
 
   return (
-    <div className="wsp-card p-5 mb-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="wsp-card mb-6 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <h4 className="text-xs font-display tracking-widest uppercase text-wsp-muted">
           Proposal Timeline
         </h4>
@@ -188,84 +191,104 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
         </div>
       </div>
 
-      {/* Calendar grid */}
+      {/* Full Calendar */}
       {months.length > 0 ? (
-        <div className={`grid gap-4 ${months.length === 1 ? "grid-cols-1 max-w-xs" : months.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
-          {months.map(({ year, month }) => {
+        <div className="space-y-0">
+          {months.map(({ year, month }, monthIdx) => {
             const grid = getMonthGrid(year, month);
-            const monthName = new Date(year, month).toLocaleDateString("en-CA", { month: "long", year: "numeric" });
+            const monthLabel = new Date(year, month).toLocaleDateString("en-CA", { month: "long", year: "numeric" });
+            const weeks: (number | null)[][] = [];
+            for (let i = 0; i < grid.length; i += 7) {
+              weeks.push(grid.slice(i, i + 7));
+            }
+
             return (
               <div key={`${year}-${month}`}>
-                <p className="text-xs font-display font-semibold text-wsp-dark mb-2 tracking-wide">{monthName}</p>
-                <div className="grid grid-cols-7 gap-px">
-                  {DAY_NAMES.map(d => (
-                    <div key={d} className="text-[9px] text-wsp-muted text-center font-mono pb-1">{d}</div>
-                  ))}
-                  {grid.map((day, i) => {
-                    if (day === null) return <div key={`pad-${i}`} />;
-                    const ds = toDateStr(year, month, day);
-                    const events = dateEvents[ds] || [];
-                    const isToday = ds === todayStr;
-                    const milestoneEvents = events.filter((e: any) => e.type === "milestone");
-                    const checkinEvents = events.filter((e: any) => e.type === "checkin");
-
-                    return (
-                      <div
-                        key={ds}
-                        className={`relative text-center py-1 text-xs rounded group
-                          ${isToday ? "bg-wsp-dark text-white font-bold" : "text-wsp-dark hover:bg-gray-50"}
-                          ${milestoneEvents.length > 0 ? "font-semibold" : ""}`}
-                      >
-                        {day}
-                        {/* Dots under the date */}
-                        {(milestoneEvents.length > 0 || checkinEvents.length > 0) && (
-                          <div className="flex justify-center gap-0.5 mt-0.5">
-                            {milestoneEvents.map((e: any, j: number) => (
-                              <div key={j} className={`w-1.5 h-1.5 rounded-full ${MILESTONE_BG[e.key]}`} />
-                            ))}
-                            {checkinEvents.map((_: any, j: number) => (
-                              <div key={`c${j}`} className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                            ))}
-                          </div>
-                        )}
-                        {/* Tooltip */}
-                        {events.length > 0 && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-wsp-dark text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-20 shadow-lg">
-                            {milestoneEvents.map((e: any, j: number) => (
-                              <div key={j}>{e.label}</div>
-                            ))}
-                            {checkinEvents.map((e: any, j: number) => (
-                              <div key={`c${j}`}>Check-in{e.notes ? `: ${e.notes}` : ""}</div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                {/* Month header */}
+                <div className="px-5 py-2 bg-gray-50 border-y border-gray-100">
+                  <h3 className="font-display font-semibold text-wsp-dark text-lg tracking-tight">{monthLabel}</h3>
                 </div>
+
+                {/* Day-of-week header */}
+                {monthIdx === 0 && (
+                  <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50/50">
+                    {DAY_NAMES.map(d => (
+                      <div key={d} className="text-xs text-wsp-muted font-display font-medium text-center py-2 tracking-wide">
+                        {d}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Week rows */}
+                {weeks.map((week, wi) => (
+                  <div key={wi} className="grid grid-cols-7 border-b border-gray-100 last:border-0">
+                    {week.map((day, di) => {
+                      if (day === null) {
+                        return <div key={`empty-${di}`} className="min-h-[72px] border-r border-gray-50 last:border-r-0" />;
+                      }
+                      const ds = toDateStr(year, month, day);
+                      const events = dateEvents[ds] || [];
+                      const isToday = ds === todayStr;
+
+                      return (
+                        <div
+                          key={ds}
+                          className={`min-h-[72px] border-r border-gray-50 last:border-r-0 p-1 ${isToday ? "bg-blue-50/40" : "hover:bg-gray-50/50"}`}
+                        >
+                          {/* Day number */}
+                          <div className="flex justify-end mb-0.5">
+                            {isToday ? (
+                              <span className="w-6 h-6 rounded-full bg-wsp-red text-white text-xs font-bold flex items-center justify-center">
+                                {day}
+                              </span>
+                            ) : (
+                              <span className={`text-xs px-1 py-0.5 ${day === 1 ? "text-wsp-dark font-medium" : "text-gray-500"}`}>
+                                {day === 1
+                                  ? new Date(year, month).toLocaleDateString("en-CA", { month: "short" }) + " " + day
+                                  : day}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Event pills */}
+                          <div className="space-y-0.5">
+                            {events.map((e: any, j: number) =>
+                              e.type === "milestone" ? (
+                                <div
+                                  key={j}
+                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold truncate border ${MILESTONE_PILL[e.key]}`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${MILESTONE_DOT[e.key]}`} />
+                                  <span className="truncate">{e.label}</span>
+                                </div>
+                              ) : (
+                                <div
+                                  key={`c${j}`}
+                                  className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate bg-violet-100 text-violet-700 border border-violet-200"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-violet-500" />
+                                  <span className="truncate">
+                                    {e.notes ? `Check-in: ${e.notes}` : "Check-in"}
+                                  </span>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="text-sm text-gray-300 italic text-center py-4">No dates set. Click Edit Timeline to get started.</p>
+        <div className="px-5 pb-5">
+          <p className="text-sm text-gray-300 italic text-center py-8">No dates set. Click Edit Timeline to get started.</p>
+        </div>
       )}
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 mt-4 pt-3 border-t border-gray-100">
-        {milestones.filter(m => m.date).map(m => (
-          <div key={m.key} className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${MILESTONE_BG[m.key]}`} />
-            <span className="text-[10px] text-wsp-muted">{m.label}: <span className="font-mono text-wsp-dark">{formatDate(m.date)}</span></span>
-          </div>
-        ))}
-        {checkins.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-violet-400" />
-            <span className="text-[10px] text-wsp-muted">{checkins.length} Check-in{checkins.length !== 1 ? "s" : ""}</span>
-          </div>
-        )}
-      </div>
 
       {/* Edit SlideOver */}
       <SlideOver open={slideOpen} onClose={() => setSlideOpen(false)} title="Edit Timeline">
