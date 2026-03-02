@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Float, Enum, DateTime, Date, ForeignKey, func
+from sqlalchemy import Column, String, Float, Text, Enum, DateTime, Date, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.base import Base
 
@@ -31,6 +31,8 @@ class Proposal(Base):
     check_in_meetings = Column(JSONB, default=list)
     target_fees = Column(JSONB, default=list)
     evaluation_criteria = Column(JSONB, default=list)
+    debrief_notes = Column(Text, nullable=True)
+    client_feedback = Column(Text, nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

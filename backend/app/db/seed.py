@@ -14,6 +14,9 @@ from app.models.deliverable import Deliverable, DeliverableType, DeliverableStat
 from app.models.scope import ScopeSection
 from app.models.discipline import ProposalDiscipline
 from app.models.compliance import ComplianceItem
+from app.models.drawing import Drawing, DrawingFormat, DrawingStatus
+from app.models.relevant_project import RelevantProject
+from app.models.client_outreach import ClientOutreach
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -443,5 +446,170 @@ async def seed_demo_proposal(db: AsyncSession):
             assigned_to=assigned,
             order_index=order,
         ))
+
+    # --- Drawings (10 items for Highway 401) ---
+    drawing_data = [
+        ("DWG-001", "General Arrangement Plan", "Civil", "1:2000", DrawingFormat.dwg, "3", "Tom Fitzgerald", DrawingStatus.in_progress),
+        ("DWG-002", "Horizontal Alignment — STA 0+000 to 2+500", "Civil", "1:1000", DrawingFormat.dwg, "3.1", "Tom Fitzgerald", DrawingStatus.in_progress),
+        ("DWG-003", "Typical Cross Sections", "Civil", "1:50", DrawingFormat.dwg, "3.2", "Tom Fitzgerald", DrawingStatus.complete),
+        ("DWG-004", "Pavement Structure Details", "Civil", "1:20", DrawingFormat.dwg, "3.3", "Anika Sharma", DrawingStatus.tbd),
+        ("DWG-005", "Drainage Plan & Profile", "Civil", "1:1000", DrawingFormat.dwg, "4.1", "Priya Nair", DrawingStatus.tbd),
+        ("DWG-006", "Bridge General Arrangement", "Structural", "1:200", DrawingFormat.dwg, "3.1", "James Okafor", DrawingStatus.in_progress),
+        ("DWG-007", "Traffic Staging Plan — Phase 1", "Civil", "1:2000", DrawingFormat.dwg, "5.1", "Tom Fitzgerald", DrawingStatus.tbd),
+        ("DWG-008", "Signage & Pavement Markings", "Civil", "1:1000", DrawingFormat.dwg, "5.2", "Anika Sharma", DrawingStatus.tbd),
+        ("DWG-009", "Environmental Constraints Map", "Environmental", "1:5000", DrawingFormat.pdf, "6", "Priya Nair", DrawingStatus.complete),
+        ("DWG-010", "Topographic Survey Base Plan", "Survey", "1:1000", DrawingFormat.dwg, "2.1", "Tom Fitzgerald", DrawingStatus.complete),
+    ]
+    for dwg_num, title, disc, scale, fmt_val, wbs_code, resp, status in drawing_data:
+        db.add(Drawing(
+            proposal_id=proposal_id,
+            wbs_id=wbs_ids.get(wbs_code),
+            drawing_number=dwg_num,
+            title=title,
+            discipline=disc,
+            scale=scale,
+            format=fmt_val,
+            responsible_party=resp,
+            status=status,
+        ))
+
+    # --- Relevant Projects (4 items) ---
+    relevant_data = [
+        ("Highway 404 Extension — Newmarket to Keswick", "221-40401-00", "Ontario Ministry of Transportation (MTO)",
+         "York Region, ON", 4200000, "2023", "Prime Consultant", "Tom Fitzgerald",
+         "Preliminary and detailed design for 18km highway extension\nInterchange design at 3 locations\nStormwater management and environmental compliance\nConstruction administration services",
+         "Directly comparable MTO highway extension project. Demonstrates WSP's ability to manage large-scale highway projects from preliminary design through construction.",
+         ["Tom Fitzgerald", "Anika Sharma"]),
+        ("Highway 69/400 Widening — Sudbury Section", "221-69400-00", "Ontario Ministry of Transportation (MTO)",
+         "Sudbury, ON", 6800000, "2021", "Prime Consultant", "Sarah Chen",
+         "Detailed design for 4-lane to 6-lane widening over 25km corridor\nBridge replacement for 2 structures\nRock cut design in Canadian Shield terrain\nEnvironmental assessment and species at risk studies",
+         "Large-scale highway widening project with similar scope to Highway 401. Demonstrates experience with complex terrain and bridge replacement.",
+         ["Sarah Chen", "Priya Nair"]),
+        ("Gardiner Expressway Rehabilitation", "221-GARD-00", "City of Toronto",
+         "Toronto, ON", 12500000, "2022", "Prime Consultant", "Tom Fitzgerald",
+         "Structural assessment and rehabilitation design for elevated expressway\nDeck replacement and barrier design\nTraffic management plan for urban expressway\nStakeholder consultation and public engagement",
+         "Major urban expressway rehabilitation demonstrating WSP's expertise with high-profile infrastructure projects and complex traffic management.",
+         ["Tom Fitzgerald", "James Okafor"]),
+        ("Highway 11 Corridor Study — Barrie to Orillia", "221-HWY11-00", "Ontario Ministry of Transportation (MTO)",
+         "Simcoe County, ON", 1800000, "2020", "Prime Consultant", "Sarah Chen",
+         "Transportation corridor study and alternatives analysis\nTraffic forecasting and demand modeling\nEnvironmental screening and constraints mapping\nPublic consultation program",
+         "MTO corridor study demonstrating WSP's planning capabilities. Environmental screening methodology applicable to Highway 401 scope.",
+         ["Sarah Chen", "Priya Nair"]),
+    ]
+    for proj_name, proj_num, client, loc, val, year, role, pm, services, rel_notes, personnel_names in relevant_data:
+        db.add(RelevantProject(
+            proposal_id=proposal_id,
+            project_name=proj_name,
+            project_number=proj_num,
+            client=client,
+            location=loc,
+            contract_value=val,
+            year_completed=year,
+            wsp_role=role,
+            project_manager=pm,
+            services_performed=services,
+            relevance_notes=rel_notes,
+            key_personnel_ids=[str(person_ids[n]) for n in personnel_names if n in person_ids],
+        ))
+
+    await db.commit()
+
+    # --- Past MTO Proposals (2 additional proposals for same client) ---
+    await _seed_past_mto_proposals(db, alice_id, proposal_id)
+
+
+async def _seed_past_mto_proposals(db: AsyncSession, alice_id, main_proposal_id):
+    """Seed 2 past MTO proposals + outreach records. Idempotent by proposal_number."""
+
+    # --- Proposal 2: Highway 7 (won) ---
+    result = await db.execute(
+        select(Proposal).where(Proposal.proposal_number == "P-2023-0288")
+    )
+    p2 = result.scalar_one_or_none()
+    if not p2:
+        p2_id = uuid.uuid4()
+        p2 = Proposal(
+            id=p2_id,
+            proposal_number="P-2023-0288",
+            title="Highway 7 Corridor Study — Kitchener to Guelph",
+            client_name="Ontario Ministry of Transportation (MTO)",
+            status=ProposalStatus.won,
+            target_dlm=2.8,
+            phases=["Study", "Preliminary", "Detailed", "Tender"],
+            submission_deadline=date(2023, 6, 15),
+            debrief_notes=(
+                "Strong technical proposal with innovative corridor modeling approach. "
+                "Client appreciated the detailed stakeholder engagement plan. "
+                "Team scored highest on technical approach (92/100)."
+            ),
+            client_feedback=(
+                "WSP's proposal demonstrated excellent understanding of the corridor challenges. "
+                "The project team's experience with similar MTO projects was a differentiator. "
+                "Fee was competitive and well-justified."
+            ),
+            created_by=alice_id,
+        )
+        db.add(p2)
+        await db.flush()
+    else:
+        p2_id = p2.id
+
+    # --- Proposal 3: QEW Bridge (lost) ---
+    result = await db.execute(
+        select(Proposal).where(Proposal.proposal_number == "P-2022-0155")
+    )
+    p3 = result.scalar_one_or_none()
+    if not p3:
+        p3_id = uuid.uuid4()
+        p3 = Proposal(
+            id=p3_id,
+            proposal_number="P-2022-0155",
+            title="QEW Bridge Rehabilitation Assessment",
+            client_name="Ontario Ministry of Transportation (MTO)",
+            status=ProposalStatus.lost,
+            target_dlm=3.2,
+            phases=["Study", "Preliminary", "Detailed"],
+            submission_deadline=date(2022, 9, 30),
+            debrief_notes=(
+                "Lost on price — technical score was strong (85/100) but fee was 12% above "
+                "the winning bid. Client indicated our scope interpretation was broader than intended. "
+                "Lesson: confirm scope boundaries during Q&A period."
+            ),
+            client_feedback=(
+                "WSP's technical approach was well-received, particularly the bridge condition "
+                "assessment methodology. However, the proposed level of effort exceeded the budget "
+                "envelope. Consider right-sizing the team for future similar submissions."
+            ),
+            created_by=alice_id,
+        )
+        db.add(p3)
+        await db.flush()
+    else:
+        p3_id = p3.id
+
+    # --- Client Outreach Records (across all 3 MTO proposals) ---
+    result = await db.execute(select(ClientOutreach).limit(1))
+    if not result.scalar_one_or_none():
+        outreach_data = [
+            (main_proposal_id, date(2026, 2, 10), "meeting", "David Park", "Senior Project Manager, MTO",
+             "Pre-RFP meeting to discuss Highway 401 widening scope and WSP's interest. David confirmed the RFP would be released in late February."),
+            (main_proposal_id, date(2026, 2, 18), "email", "David Park", "Senior Project Manager, MTO",
+             "Sent WSP capability statement and team resumes. David acknowledged receipt and confirmed review."),
+            (p2_id, date(2023, 4, 5), "presentation", "Sandra Liu", "Director of Highway Planning, MTO",
+             "Presented WSP's corridor modeling approach for Highway 7. Sandra expressed interest in the innovative traffic simulation methodology."),
+            (p2_id, date(2023, 7, 20), "call", "Sandra Liu", "Director of Highway Planning, MTO",
+             "Post-award debrief call. Sandra confirmed WSP scored highest on technical approach. Discussed lessons for future proposals."),
+            (p3_id, date(2022, 8, 15), "meeting", "Robert Kim", "Bridge Program Manager, MTO",
+             "Pre-submission meeting to clarify bridge assessment scope. Robert indicated budget constraints — should have adjusted scope accordingly."),
+        ]
+        for prop_id, odate, otype, contact, role, notes in outreach_data:
+            db.add(ClientOutreach(
+                proposal_id=prop_id,
+                outreach_date=odate,
+                outreach_type=otype,
+                contact_name=contact,
+                contact_role=role,
+                notes=notes,
+            ))
 
     await db.commit()

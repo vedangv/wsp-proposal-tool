@@ -13,6 +13,7 @@ import ScheduleTab from "../components/tabs/ScheduleTab";
 import DeliverablesTab from "../components/tabs/DeliverablesTab";
 import DrawingsTab from "../components/tabs/DrawingsTab";
 import RelevantProjectsTab from "../components/tabs/RelevantProjectsTab";
+import ClientHistoryTab from "../components/tabs/ClientHistoryTab";
 import { useProposalSocket, type Presence } from "../hooks/useProposalSocket";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -129,6 +130,7 @@ export default function ProposalDetailPage() {
         {activeTab === "deliverables" && <DeliverablesTab proposalId={id!} />}
         {activeTab === "drawings"          && <DrawingsTab proposalId={id!} />}
         {activeTab === "relevant-projects" && <RelevantProjectsTab proposalId={id!} />}
+        {activeTab === "client-history"    && <ClientHistoryTab proposalId={id!} />}
       </div>
     </div>
   );

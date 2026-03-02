@@ -32,6 +32,8 @@ export interface Proposal {
   check_in_meetings: CheckInMeeting[] | null;
   target_fees: TargetFee[] | null;
   evaluation_criteria: EvaluationCriterion[] | null;
+  debrief_notes: string | null;
+  client_feedback: string | null;
   created_at: string;
   updated_at: string;
 }

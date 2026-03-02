@@ -8,6 +8,7 @@ const TABS = [
   { id: "deliverables",      label: "Deliverables" },
   { id: "drawings",          label: "Drawing List" },
   { id: "relevant-projects", label: "Relevant Projects" },
+  { id: "client-history",    label: "Client History" },
 ];
 
 interface TabNavProps {

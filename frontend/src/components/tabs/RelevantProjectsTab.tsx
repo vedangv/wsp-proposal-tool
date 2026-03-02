@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { relevantProjectsApi, type RelevantProject } from "../../api/relevantProjects";
 import { peopleApi, type Person } from "../../api/people";
+import { agentsApi, type RelevantProjectResult } from "../../api/agents";
 
 interface Props { proposalId: string; }
 
@@ -15,6 +16,55 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<RelevantProject>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [fetchResults, setFetchResults] = useState<RelevantProjectResult[] | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startFetch = useCallback(async () => {
+    setFetching(true);
+    setFetchResults(null);
+    try {
+      const { job_id } = await agentsApi.startRelevantProjectsFetch(proposalId);
+      pollRef.current = setInterval(async () => {
+        try {
+          const job = await agentsApi.pollJob(job_id);
+          if (job.status === "complete" && job.result) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setFetchResults(job.result as unknown as RelevantProjectResult[]);
+            setFetching(false);
+          } else if (job.status === "error") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setFetching(false);
+          }
+        } catch {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setFetching(false);
+        }
+      }, 1000);
+    } catch {
+      setFetching(false);
+    }
+  }, [proposalId]);
+
+  const acceptResult = async (r: RelevantProjectResult) => {
+    await relevantProjectsApi.create(proposalId, {
+      project_name: r.project_name,
+      client: r.client,
+      contract_value: r.contract_value,
+      year_completed: r.year_completed,
+      location: r.location,
+      wsp_role: r.wsp_role,
+      project_manager: r.project_manager,
+      services_performed: r.services_performed,
+      relevance_notes: r.relevance_notes,
+    });
+    qc.invalidateQueries({ queryKey: ["relevant-projects", proposalId] });
+    setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
+  const dismissResult = (r: RelevantProjectResult) => {
+    setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["relevant-projects", proposalId],
@@ -87,10 +137,74 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
             Past and current WSP projects demonstrating relevant experience
           </p>
         </div>
-        <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
-          + Add Project
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={startFetch}
+            disabled={fetching}
+            className="px-4 py-2 text-xs font-display tracking-wide rounded border
+              bg-purple-600 text-white border-purple-600 hover:bg-purple-700
+              disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {fetching && (
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {fetching ? "Analyzing RFP..." : "Fetch from RFP"}
+          </button>
+          <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
+            + Add Project
+          </button>
+        </div>
       </div>
+
+      {/* Agent fetch results */}
+      {fetchResults && fetchResults.length > 0 && (
+        <div className="mb-5 space-y-3">
+          <h4 className="text-xs font-display tracking-widest uppercase text-purple-600 font-semibold">
+            AI Suggestions — Review & Accept
+          </h4>
+          {fetchResults.map((r, i) => (
+            <div key={i} className="wsp-card border-purple-200 border-l-4 border-l-purple-500">
+              <div className="p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <span className="font-display font-semibold text-wsp-dark text-sm">{r.project_name}</span>
+                      <span className="text-xs text-wsp-muted font-body">{r.client}</span>
+                      {r.location && <span className="text-xs text-wsp-muted font-body">· {r.location}</span>}
+                    </div>
+                    <div className="flex items-center gap-4 mt-1">
+                      <span className="text-xs font-mono text-wsp-muted">{r.year_completed}</span>
+                      <span className="text-xs font-mono text-wsp-dark font-semibold">{fmt(r.contract_value)}</span>
+                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">{r.wsp_role}</span>
+                      <span className="text-xs text-wsp-muted font-body">PM: {r.project_manager}</span>
+                    </div>
+                    {r.relevance_notes && (
+                      <p className="text-xs text-purple-700 font-body mt-2 bg-purple-50 p-2 rounded">{r.relevance_notes}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => acceptResult(r)}
+                      className="text-xs px-3 py-1.5 border border-green-300 text-green-700 hover:bg-green-50 rounded font-display tracking-wide"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => dismissResult(r)}
+                      className="text-xs px-3 py-1.5 border border-wsp-border text-wsp-muted hover:text-wsp-dark rounded"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-3">
         {projects.map(p => (

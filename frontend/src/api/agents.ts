@@ -25,6 +25,18 @@ export interface RFPScopeResult {
   content: string;
 }
 
+export interface RelevantProjectResult {
+  project_name: string;
+  client: string;
+  contract_value: number;
+  year_completed: string;
+  location: string;
+  wsp_role: string;
+  project_manager: string;
+  services_performed: string;
+  relevance_notes: string;
+}
+
 export const agentsApi = {
   startCVFetch: (proposalId: string, names: string[]) =>
     api.post<{ job_id: string; status: string }>("/api/agents/cv-fetch", {
@@ -34,6 +46,11 @@ export const agentsApi = {
 
   startRFPExtract: (proposalId: string) =>
     api.post<{ job_id: string; status: string }>("/api/agents/rfp-extract", {
+      proposal_id: proposalId,
+    }).then(r => r.data),
+
+  startRelevantProjectsFetch: (proposalId: string) =>
+    api.post<{ job_id: string; status: string }>("/api/agents/relevant-projects-fetch", {
       proposal_id: proposalId,
     }).then(r => r.data),
 

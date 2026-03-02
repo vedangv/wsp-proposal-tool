@@ -47,6 +47,8 @@ class ProposalCreate(BaseModel):
     check_in_meetings: Optional[list[CheckInMeeting]] = None
     target_fees: Optional[list[TargetFee]] = None
     evaluation_criteria: Optional[list[EvaluationCriterion]] = None
+    debrief_notes: Optional[str] = None
+    client_feedback: Optional[str] = None
 
 
 class ProposalUpdate(BaseModel):
@@ -63,6 +65,8 @@ class ProposalUpdate(BaseModel):
     check_in_meetings: Optional[list[CheckInMeeting]] = None
     target_fees: Optional[list[TargetFee]] = None
     evaluation_criteria: Optional[list[EvaluationCriterion]] = None
+    debrief_notes: Optional[str] = None
+    client_feedback: Optional[str] = None
 
 
 class ProposalOut(BaseModel):
@@ -81,6 +85,8 @@ class ProposalOut(BaseModel):
     check_in_meetings: Optional[list] = None
     target_fees: Optional[list] = None
     evaluation_criteria: Optional[list] = None
+    debrief_notes: Optional[str] = None
+    client_feedback: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
