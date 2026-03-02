@@ -6,6 +6,10 @@ import { peopleApi } from "../api/people";
 import { wbsApi } from "../api/wbs";
 import { deliverablesApi } from "../api/deliverables";
 import { scheduleApi } from "../api/schedule";
+import { drawingsApi } from "../api/drawings";
+import { disciplinesApi } from "../api/disciplines";
+import { complianceApi } from "../api/compliance";
+import { relevantProjectsApi } from "../api/relevantProjects";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
@@ -46,6 +50,26 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
   const { data: schedule = [] } = useQuery({
     queryKey: ["schedule", proposalId],
     queryFn: () => scheduleApi.list(proposalId),
+  });
+
+  const { data: drawings = [] } = useQuery({
+    queryKey: ["drawings", proposalId],
+    queryFn: () => drawingsApi.list(proposalId),
+  });
+
+  const { data: disciplines = [] } = useQuery({
+    queryKey: ["disciplines", proposalId],
+    queryFn: () => disciplinesApi.list(proposalId),
+  });
+
+  const { data: complianceItems = [] } = useQuery({
+    queryKey: ["compliance", proposalId],
+    queryFn: () => complianceApi.list(proposalId),
+  });
+
+  const { data: relevantProjects = [] } = useQuery({
+    queryKey: ["relevant-projects", proposalId],
+    queryFn: () => relevantProjectsApi.list(proposalId),
   });
 
   const milestones = schedule.filter(s => s.is_milestone);
@@ -135,6 +159,80 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
             </div>
           </div>
         </section>
+
+        {/* Timeline / Key Dates */}
+        <section className="mb-8 print:mb-6">
+          <h2 className="font-display font-semibold text-sm tracking-widest uppercase text-wsp-muted mb-3 border-b border-wsp-border pb-1">
+            Proposal Timeline
+          </h2>
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            {[
+              { label: "Kickoff", date: proposal.kickoff_date, color: "border-l-blue-500" },
+              { label: "Red Review", date: proposal.red_review_date, color: "border-l-red-500" },
+              { label: "Gold Review", date: proposal.gold_review_date, color: "border-l-amber-500" },
+              { label: "Submission Deadline", date: proposal.submission_deadline, color: "border-l-emerald-600" },
+            ].map(m => (
+              <div key={m.label} className={`border-l-4 ${m.color} pl-3`}>
+                <p className="text-xs text-wsp-muted font-body">{m.label}</p>
+                <p className="font-mono text-sm text-wsp-dark font-semibold">{m.date || "—"}</p>
+              </div>
+            ))}
+          </div>
+          {proposal.check_in_meetings && proposal.check_in_meetings.length > 0 && (
+            <div>
+              <p className="text-xs font-display font-semibold text-wsp-dark tracking-wide mb-2">Check-in Meetings</p>
+              <div className="grid grid-cols-2 gap-2">
+                {proposal.check_in_meetings.map((m: any, i: number) => (
+                  <div key={i} className="flex gap-3 items-baseline">
+                    <span className="font-mono text-xs text-wsp-muted w-20 flex-shrink-0">{m.date}</span>
+                    <span className="text-xs text-wsp-dark">{m.notes || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {dash.days_remaining != null && (
+            <p className={`text-xs font-mono font-bold mt-3 ${
+              dash.days_remaining <= 3 ? "text-wsp-red" : dash.days_remaining <= 7 ? "text-amber-600" : "text-emerald-600"
+            }`}>
+              {dash.days_remaining > 0 ? `${dash.days_remaining} days remaining` :
+               dash.days_remaining === 0 ? "Due today" : `${Math.abs(dash.days_remaining)} days overdue`}
+            </p>
+          )}
+        </section>
+
+        {/* Disciplines */}
+        {disciplines.length > 0 && (
+          <section className="mb-8 print:mb-6">
+            <h2 className="font-display font-semibold text-sm tracking-widest uppercase text-wsp-muted mb-3 border-b border-wsp-border pb-1">
+              Disciplines ({disciplines.length})
+            </h2>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-wsp-border text-left">
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Discipline</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Contact</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Email</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {disciplines.map(d => (
+                  <tr key={d.id} className="border-b border-wsp-border/50">
+                    <td className="py-1 font-medium text-wsp-dark">{d.discipline_name}</td>
+                    <td className="py-1 text-wsp-muted">{d.contact_name || "—"}</td>
+                    <td className="py-1 text-blue-600 text-xs">{d.contact_email || "—"}</td>
+                    <td className="py-1 text-xs">
+                      <span className={`${d.status === "confirmed" ? "text-emerald-600" : d.status === "contacted" ? "text-blue-600" : d.status === "declined" ? "text-red-600" : "text-gray-400"}`}>
+                        {d.status.replace("_", " ")}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {/* Team List */}
         {people.length > 0 && (
@@ -277,6 +375,101 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
                 ))}
               </tbody>
             </table>
+          </section>
+        )}
+
+        {/* Drawings */}
+        {drawings.length > 0 && (
+          <section className="mb-8 print:mb-6">
+            <h2 className="font-display font-semibold text-sm tracking-widest uppercase text-wsp-muted mb-3 border-b border-wsp-border pb-1">
+              Drawing List ({drawings.length})
+            </h2>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-wsp-border text-left">
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-20">No.</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Title</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Discipline</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-16">Scale</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-16">Format</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {drawings.map(d => (
+                  <tr key={d.id} className="border-b border-wsp-border/50">
+                    <td className="py-1 font-mono text-wsp-red text-xs">{d.drawing_number || "—"}</td>
+                    <td className="py-1 text-wsp-dark">{d.title}</td>
+                    <td className="py-1 text-wsp-muted text-xs">{d.discipline || "—"}</td>
+                    <td className="py-1 font-mono text-xs text-wsp-muted">{d.scale || "—"}</td>
+                    <td className="py-1 text-xs text-wsp-muted uppercase">{d.format}</td>
+                    <td className="py-1 text-xs">
+                      <span className={`${d.status === "complete" ? "text-emerald-600" : d.status === "in_progress" ? "text-blue-600" : "text-gray-400"}`}>
+                        {d.status.replace("_", " ")}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* Relevant Projects */}
+        {relevantProjects.length > 0 && (
+          <section className="mb-8 print:mb-6">
+            <h2 className="font-display font-semibold text-sm tracking-widest uppercase text-wsp-muted mb-3 border-b border-wsp-border pb-1">
+              Relevant Projects ({relevantProjects.length})
+            </h2>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-wsp-border text-left">
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Project</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Client</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Value</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-16">Year</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-28">Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {relevantProjects.map(p => (
+                  <tr key={p.id} className="border-b border-wsp-border/50">
+                    <td className="py-1 font-medium text-wsp-dark">{p.project_name}</td>
+                    <td className="py-1 text-wsp-muted text-xs">{p.client || "—"}</td>
+                    <td className="py-1 text-right font-mono text-xs text-wsp-dark">
+                      {p.contract_value != null ? fmt(Number(p.contract_value)) : "—"}
+                    </td>
+                    <td className="py-1 font-mono text-xs text-wsp-muted">{p.year_completed || "—"}</td>
+                    <td className="py-1 text-xs text-wsp-muted">{p.wsp_role || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* Compliance Checklist */}
+        {complianceItems.length > 0 && (
+          <section className="mb-8 print:mb-6">
+            <h2 className="font-display font-semibold text-sm tracking-widest uppercase text-wsp-muted mb-3 border-b border-wsp-border pb-1">
+              Compliance Checklist
+            </h2>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {complianceItems.map(item => (
+                <div key={item.id} className="flex items-center gap-2 py-1">
+                  <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0
+                    ${item.status === "completed" ? "bg-emerald-500 border-emerald-500 text-white" :
+                      item.status === "not_applicable" ? "bg-gray-200 border-gray-300" :
+                      "border-gray-300"}`}>
+                    {item.status === "completed" && <span className="text-[8px]">&#10003;</span>}
+                    {item.status === "not_applicable" && <span className="text-[8px] text-gray-400">—</span>}
+                  </span>
+                  <span className={`text-xs flex-1 ${item.status === "completed" ? "line-through text-wsp-muted" : item.status === "not_applicable" ? "text-gray-300" : "text-wsp-dark"}`}>
+                    {item.item_name}
+                  </span>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 

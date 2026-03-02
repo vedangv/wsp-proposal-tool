@@ -102,15 +102,22 @@ Scope Sections         (proposal_id only — rich text)
 
 ## Sprint Plan
 
-| Sprint | Focus |
-|--------|-------|
-| 1 | Repo setup, Docker Compose, FastAPI + React scaffold, DB migrations, JWT auth, proposal list |
-| 2 | Proposal detail shell + tab nav + WBS tab (full CRUD) |
-| 3 | Pricing Matrix + People + WBS cross-linking |
-| 4 | Schedule tab + Gantt chart + milestones |
-| 5 | Deliverables + Drawing List + cross-tab relationships |
-| 6 | Real-time WebSockets + presence indicators |
-| 7 | CV-fetcher agent demo + polish + README + demo script |
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| 1 | Repo setup, Docker Compose, FastAPI + React scaffold, DB migrations, JWT auth, proposal list | Done |
+| 2 | Proposal detail shell + tab nav + WBS tab (full CRUD) | Done |
+| 3 | Pricing Matrix + People + WBS cross-linking | Done |
+| 4 | Schedule tab + Gantt chart + milestones | Done |
+| 5 | Deliverables + Drawing List + cross-tab relationships | Done |
+| 6 | Real-time WebSockets + presence indicators | Done |
+| 7 | CV-fetcher agent demo + polish + README + demo script | Done |
+| 8 | Financial model: rates, DLM, rate cascade, custom phases | Done |
+| 9 | Dashboard (metrics, fee summary, timeline), tab completion indicators | Done |
+| 10 | WBS auto-numbering, Scope-WBS linkage, WebSocket reconnection | Done |
+| 11 | Proposal templates, print summary, Relevant Projects-People linkage | Done |
+| 12 | Disciplines tracker, compliance checklist, timeline calendar, Railway deploy | Done |
+| 13 | Status dropdown (won/lost), full calendar, target fees, evaluation criteria | Done |
+| 14 | Client History tab, demo data (drawings/projects), Fetch from RFP agent, print enhancements | Done |
 
 ---
 

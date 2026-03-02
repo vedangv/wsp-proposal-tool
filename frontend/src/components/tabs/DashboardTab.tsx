@@ -83,6 +83,7 @@ function toDateStr(y: number, m: number, d: number) {
 
 function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }) {
   const qc = useQueryClient();
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [slideOpen, setSlideOpen] = useState(false);
   const [formDates, setFormDates] = useState({
     kickoff_date: "",
@@ -230,11 +231,17 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
                       const ds = toDateStr(year, month, day);
                       const events = dateEvents[ds] || [];
                       const isToday = ds === todayStr;
+                      const isSelected = ds === selectedDay;
+                      const hasEvents = events.length > 0;
 
                       return (
                         <div
                           key={ds}
-                          className={`min-h-[72px] border-r border-gray-50 last:border-r-0 p-1 ${isToday ? "bg-blue-50/40" : "hover:bg-gray-50/50"}`}
+                          className={`min-h-[72px] border-r border-gray-50 last:border-r-0 p-1 relative
+                            ${isToday ? "bg-blue-50/40" : ""}
+                            ${isSelected ? "bg-blue-50 ring-2 ring-blue-400 ring-inset z-10" : ""}
+                            ${hasEvents && !isSelected ? "cursor-pointer hover:bg-gray-50/80" : !isSelected ? "hover:bg-gray-50/50" : ""}`}
+                          onClick={() => hasEvents ? setSelectedDay(isSelected ? null : ds) : setSelectedDay(null)}
                         >
                           {/* Day number */}
                           <div className="flex justify-end mb-0.5">
@@ -243,7 +250,7 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
                                 {day}
                               </span>
                             ) : (
-                              <span className={`text-xs px-1 py-0.5 ${day === 1 ? "text-wsp-dark font-medium" : "text-gray-500"}`}>
+                              <span className={`text-xs px-1 py-0.5 ${hasEvents ? "font-semibold text-wsp-dark" : day === 1 ? "text-wsp-dark font-medium" : "text-gray-400"}`}>
                                 {day === 1
                                   ? new Date(year, month).toLocaleDateString("en-CA", { month: "short" }) + " " + day
                                   : day}
@@ -275,6 +282,28 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
                               )
                             )}
                           </div>
+
+                          {/* Selected day detail popover */}
+                          {isSelected && events.length > 0 && (
+                            <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-3 z-50"
+                              onClick={e => e.stopPropagation()}>
+                              <p className="text-xs font-display font-semibold text-wsp-dark mb-2">
+                                {new Date(ds + "T00:00:00").toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}
+                              </p>
+                              <div className="space-y-2">
+                                {events.map((e: any, j: number) => (
+                                  <div key={j} className={`rounded p-2 ${e.type === "milestone" ? MILESTONE_PILL[e.key] : "bg-violet-50 text-violet-700"}`}>
+                                    <p className="text-xs font-semibold">
+                                      {e.type === "milestone" ? e.label : "Check-in Meeting"}
+                                    </p>
+                                    {e.notes && (
+                                      <p className="text-[11px] mt-0.5 opacity-80">{e.notes}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

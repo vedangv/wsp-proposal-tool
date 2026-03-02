@@ -78,10 +78,19 @@ proposals
   proposal_number   VARCHAR UNIQUE NOT NULL
   title             VARCHAR NOT NULL
   client_name       VARCHAR
-  status            ENUM (draft, in_review, submitted)
+  status            ENUM (draft, in_review, submitted, won, lost)
   target_dlm        FLOAT DEFAULT 3.0       -- proposal-wide DLM target
   team_dlm_targets  JSONB DEFAULT '{}'      -- per-team targets, e.g. {"Transportation": 3.2}
   phases            JSONB                   -- custom phases, e.g. ["Study", "Preliminary", ...]
+  kickoff_date      DATE                    -- milestone dates
+  red_review_date   DATE
+  gold_review_date  DATE
+  submission_deadline DATE
+  check_in_meetings JSONB DEFAULT '[]'      -- [{date, notes}]
+  target_fees       JSONB DEFAULT '[]'      -- [{description, amount}]
+  evaluation_criteria JSONB DEFAULT '[]'    -- [{criterion, weight, notes}]
+  debrief_notes     TEXT                    -- post-submission debrief
+  client_feedback   TEXT                    -- client feedback received
   created_by        UUID REFERENCES users
   created_at        TIMESTAMP
   updated_at        TIMESTAMP
@@ -307,16 +316,17 @@ Proposals List
   └── New from Template (Road/Highway, Environmental Assessment, Bridge/Structure)
 
 Proposal #XYZ — Client Name
-    ├── Dashboard        (key metrics, fee summary, DLM, tab completion, settings)
-    ├── Overview         (scope sections — rich text, optional WBS linkage)
+    ├── Dashboard        (key metrics, fee summary, DLM, timeline calendar, disciplines, compliance)
+    ├── Overview         (scope, target fees, evaluation criteria, RFP extract agent)
     ├── WBS              (editable table, source of truth, auto-numbering)
     ├── Pricing Matrix   (people assigned to leaf WBS items, billing + cost view)
-    ├── People           (team roster with cost/burdened/billing rates, DLM)
+    ├── People           (team roster with cost/burdened/billing rates, DLM, CV fetch agent)
     ├── Schedule         (Gantt chart + list toggle, WBS-linked)
     ├── Deliverables     (project outputs, WBS-linked)
     ├── Drawing List     (engineering drawings, WBS + Deliverable linked)
-    ├── Relevant Projects (past work, linked to key personnel)
-    └── Print Summary    (printable proposal summary page)
+    ├── Relevant Projects (past work, linked to key personnel, AI fetch from RFP agent)
+    ├── Client History   (past proposals for same client, outreach log, debrief notes)
+    └── Print Summary    (printable summary: timeline, fees, team, WBS, drawings, compliance)
 ```
 
 ---
@@ -339,19 +349,19 @@ The backend exposes a `/agents` API namespace from day one. PoC implements one d
 ### API Namespace
 
 ```
-POST /api/agents/cv-fetcher          -- given people list, retrieves CVs
-POST /api/agents/proposal-assistant  -- Claude fills scope sections from context
-POST /api/agents/schedule-generator  -- Claude suggests schedule from WBS items
-GET  /api/agents/jobs/{job_id}       -- async job polling endpoint
+POST /api/agents/cv-fetch                  -- given people list, retrieves CVs
+POST /api/agents/rfp-extract               -- extract scope sections from RFP
+POST /api/agents/relevant-projects-fetch   -- find relevant projects from RFP requirements
+GET  /api/agents/jobs/{job_id}             -- async job polling endpoint
 ```
 
-### PoC Demo Agent: CV Fetcher
+### PoC Demo Agents (3 implemented with mock data)
 
-1. User navigates to People tab, clicks "Fetch CVs"
-2. Backend sends people list to Claude with mock employee profiles
-3. Claude returns a summary card per person (name, role, experience highlights)
-4. Cards display inline on the People tab
-5. Demonstrates the agent loop without real Oracle HCM data
+1. **CV Fetcher** — People tab "Fetch CVs" button. Returns mock CV summaries per person.
+2. **RFP Extractor** — Overview tab "Fetch from RFP" button. Returns mock scope sections.
+3. **Relevant Projects Fetcher** — Relevant Projects tab "Fetch from RFP" button. Returns AI-suggested relevant projects with Accept/Dismiss review cards.
+
+All agents follow the same async pattern: POST creates a job → mock 2s delay → poll for results.
 
 ---
 
@@ -366,10 +376,13 @@ GET  /api/agents/jobs/{job_id}       -- async job polling endpoint
 | Sprint 5 | Deliverables tab + Drawing List tab + cross-tab relationship views | Done |
 | Sprint 6 | Real-time WebSockets across all tabs + presence indicators | Done |
 | Sprint 7 | CV-fetcher agent demo + Relevant Projects tab + UI polish | Done |
-| Sprint 8 | Financial model: cost/burdened/billing rates, DLM targets, rate cascade, custom phases, code hygiene | Planned |
-| Sprint 9 | Proposal Dashboard (metrics, fee summary, settings), custom phases UI, tab completion indicators | Planned |
-| Sprint 10 | WBS auto-numbering, Scope-WBS linkage, delete confirmations, WebSocket reconnection | Planned |
-| Sprint 11 | Proposal templates, print summary/export, Relevant Projects-People linkage, error toasts | Planned |
+| Sprint 8 | Financial model: cost/burdened/billing rates, DLM targets, rate cascade, custom phases, code hygiene | Done |
+| Sprint 9 | Proposal Dashboard (metrics, fee summary, settings), custom phases UI, tab completion indicators | Done |
+| Sprint 10 | WBS auto-numbering, Scope-WBS linkage, delete confirmations, WebSocket reconnection | Done |
+| Sprint 11 | Proposal templates, print summary/export, Relevant Projects-People linkage, error toasts | Done |
+| Sprint 12 | Disciplines tracker, compliance checklist, timeline calendar, Railway deployment | Done |
+| Sprint 13 | Status dropdown (won/lost), full calendar view, target fees, evaluation criteria | Done |
+| Sprint 14 | Client History tab, demo drawings/relevant projects, "Fetch from RFP" agent, print summary enhancements | Done |
 
 ---
 
