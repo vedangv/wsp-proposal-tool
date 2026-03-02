@@ -2,11 +2,233 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scopeApi, type ScopeSection } from "../../api/scope";
 import { wbsApi } from "../../api/wbs";
+import { proposalsApi, type TargetFee, type EvaluationCriterion } from "../../api/proposals";
 import { agentsApi, type RFPScopeResult } from "../../api/agents";
 
 interface Props { proposalId: string; }
 
 type FetchState = "idle" | "fetching" | "done" | "error";
+
+const fmtCurrency = (n: number) =>
+  new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
+
+/* ── Target Fees Section ──────────────────────────── */
+
+function TargetFeesSection({ proposalId }: { proposalId: string }) {
+  const qc = useQueryClient();
+  const { data: proposal } = useQuery({
+    queryKey: ["proposal", proposalId],
+    queryFn: () => proposalsApi.get(proposalId),
+  });
+
+  const fees: TargetFee[] = proposal?.target_fees || [];
+  const [editing, setEditing] = useState(false);
+  const [editFees, setEditFees] = useState<TargetFee[]>([]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { target_fees: TargetFee[] }) => proposalsApi.update(proposalId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["proposal", proposalId] });
+      setEditing(false);
+    },
+  });
+
+  const startEdit = () => {
+    setEditFees(fees.length > 0 ? fees.map(f => ({ ...f })) : [{ description: "", amount: 0 }]);
+    setEditing(true);
+  };
+
+  const addRow = () => setEditFees(prev => [...prev, { description: "", amount: 0 }]);
+  const removeRow = (i: number) => setEditFees(prev => prev.filter((_, idx) => idx !== i));
+  const updateRow = (i: number, field: keyof TargetFee, value: string | number) =>
+    setEditFees(prev => prev.map((f, idx) => idx === i ? { ...f, [field]: value } : f));
+
+  const total = fees.reduce((sum, f) => sum + f.amount, 0);
+
+  return (
+    <div className="bg-white rounded-lg border mb-6">
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-semibold text-gray-800 text-sm">Target Fees</h4>
+          <button onClick={startEdit} className="text-xs text-gray-400 hover:text-gray-700">
+            {fees.length === 0 ? "+ Add Fees" : "Edit"}
+          </button>
+        </div>
+
+        {editing ? (
+          <div className="space-y-2">
+            {editFees.map((f, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <input
+                  className="border rounded px-3 py-1.5 text-sm flex-1"
+                  placeholder="Fee category (e.g. Design, Construction)"
+                  value={f.description}
+                  onChange={e => updateRow(i, "description", e.target.value)}
+                />
+                <input
+                  type="number"
+                  className="border rounded px-3 py-1.5 text-sm w-36 text-right font-mono"
+                  placeholder="0"
+                  value={f.amount || ""}
+                  onChange={e => updateRow(i, "amount", parseFloat(e.target.value) || 0)}
+                />
+                <button onClick={() => removeRow(i)} className="text-red-400 hover:text-red-600 text-xs">X</button>
+              </div>
+            ))}
+            <button onClick={addRow} className="text-xs text-blue-600 hover:text-blue-800">+ Add Row</button>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => updateMutation.mutate({ target_fees: editFees.filter(f => f.description) })}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+              >Save</button>
+              <button onClick={() => setEditing(false)} className="border px-3 py-1.5 rounded text-sm text-gray-600">Cancel</button>
+            </div>
+          </div>
+        ) : fees.length > 0 ? (
+          <div>
+            <table className="w-full text-sm">
+              <tbody>
+                {fees.map((f, i) => (
+                  <tr key={i} className="border-b border-gray-50 last:border-0">
+                    <td className="py-1.5 text-gray-700">{f.description}</td>
+                    <td className="py-1.5 text-right font-mono text-gray-800">{fmtCurrency(f.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-gray-200">
+                  <td className="py-2 font-semibold text-gray-800">Total</td>
+                  <td className="py-2 text-right font-mono font-bold text-gray-900">{fmtCurrency(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-300 italic">No target fees set. Click + Add Fees to get started.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Evaluation Criteria Section ──────────────────── */
+
+function EvaluationCriteriaSection({ proposalId }: { proposalId: string }) {
+  const qc = useQueryClient();
+  const { data: proposal } = useQuery({
+    queryKey: ["proposal", proposalId],
+    queryFn: () => proposalsApi.get(proposalId),
+  });
+
+  const criteria: EvaluationCriterion[] = proposal?.evaluation_criteria || [];
+  const [editing, setEditing] = useState(false);
+  const [editCriteria, setEditCriteria] = useState<EvaluationCriterion[]>([]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { evaluation_criteria: EvaluationCriterion[] }) => proposalsApi.update(proposalId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["proposal", proposalId] });
+      setEditing(false);
+    },
+  });
+
+  const startEdit = () => {
+    setEditCriteria(criteria.length > 0 ? criteria.map(c => ({ ...c })) : [{ criterion: "", weight: 0, notes: "" }]);
+    setEditing(true);
+  };
+
+  const addRow = () => setEditCriteria(prev => [...prev, { criterion: "", weight: 0, notes: "" }]);
+  const removeRow = (i: number) => setEditCriteria(prev => prev.filter((_, idx) => idx !== i));
+  const updateRow = (i: number, field: keyof EvaluationCriterion, value: string | number) =>
+    setEditCriteria(prev => prev.map((c, idx) => idx === i ? { ...c, [field]: value } : c));
+
+  const totalWeight = criteria.reduce((sum, c) => sum + c.weight, 0);
+
+  return (
+    <div className="bg-white rounded-lg border mb-6">
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-semibold text-gray-800 text-sm">Evaluation Criteria</h4>
+          <button onClick={startEdit} className="text-xs text-gray-400 hover:text-gray-700">
+            {criteria.length === 0 ? "+ Add Criteria" : "Edit"}
+          </button>
+        </div>
+
+        {editing ? (
+          <div className="space-y-2">
+            {editCriteria.map((c, i) => (
+              <div key={i} className="flex gap-2 items-start">
+                <input
+                  className="border rounded px-3 py-1.5 text-sm flex-1"
+                  placeholder="Criterion (e.g. Technical Approach)"
+                  value={c.criterion}
+                  onChange={e => updateRow(i, "criterion", e.target.value)}
+                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    className="border rounded px-2 py-1.5 text-sm w-16 text-right font-mono"
+                    placeholder="0"
+                    value={c.weight || ""}
+                    onChange={e => updateRow(i, "weight", parseFloat(e.target.value) || 0)}
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+                <input
+                  className="border rounded px-3 py-1.5 text-sm w-48"
+                  placeholder="Notes (optional)"
+                  value={c.notes}
+                  onChange={e => updateRow(i, "notes", e.target.value)}
+                />
+                <button onClick={() => removeRow(i)} className="text-red-400 hover:text-red-600 text-xs mt-2">X</button>
+              </div>
+            ))}
+            <button onClick={addRow} className="text-xs text-blue-600 hover:text-blue-800">+ Add Row</button>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => updateMutation.mutate({ evaluation_criteria: editCriteria.filter(c => c.criterion) })}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+              >Save</button>
+              <button onClick={() => setEditing(false)} className="border px-3 py-1.5 rounded text-sm text-gray-600">Cancel</button>
+            </div>
+          </div>
+        ) : criteria.length > 0 ? (
+          <div>
+            <div className="space-y-2">
+              {criteria.map((c, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-800 font-medium">{c.criterion}</span>
+                      <span className="font-mono text-xs text-blue-600 font-bold">{c.weight}%</span>
+                    </div>
+                    {c.notes && <p className="text-xs text-gray-400 mt-0.5">{c.notes}</p>}
+                  </div>
+                  <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full"
+                      style={{ width: `${Math.min(c.weight, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {totalWeight !== 100 && totalWeight > 0 && (
+              <p className="text-xs text-amber-600 mt-3 font-mono">
+                Total: {totalWeight}% {totalWeight < 100 ? `(${100 - totalWeight}% remaining)` : "(exceeds 100%)"}
+              </p>
+            )}
+            {totalWeight === 100 && (
+              <p className="text-xs text-emerald-600 mt-3 font-mono">Total: 100%</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-300 italic">No evaluation criteria defined. Click + Add Criteria to get started.</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function OverviewTab({ proposalId }: Props) {
   const qc = useQueryClient();
@@ -138,6 +360,15 @@ export default function OverviewTab({ proposalId }: Props) {
           >+ Add Section</button>
         </div>
       </div>
+
+      {/* Target Fees & Evaluation Criteria */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+        <TargetFeesSection proposalId={proposalId} />
+        <EvaluationCriteriaSection proposalId={proposalId} />
+      </div>
+
+      {/* Scope Sections heading */}
+      <h4 className="font-semibold text-gray-800 text-sm mb-4">Scope Sections</h4>
 
       {/* RFP extraction results */}
       {fetchState === "error" && (

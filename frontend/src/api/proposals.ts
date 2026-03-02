@@ -5,12 +5,23 @@ export interface CheckInMeeting {
   notes: string;
 }
 
+export interface TargetFee {
+  description: string;
+  amount: number;
+}
+
+export interface EvaluationCriterion {
+  criterion: string;
+  weight: number;
+  notes: string;
+}
+
 export interface Proposal {
   id: string;
   proposal_number: string;
   title: string;
   client_name: string | null;
-  status: "draft" | "in_review" | "submitted";
+  status: "draft" | "in_review" | "submitted" | "won" | "lost";
   target_dlm: number | null;
   team_dlm_targets: Record<string, number> | null;
   phases: string[] | null;
@@ -19,6 +30,8 @@ export interface Proposal {
   gold_review_date: string | null;
   submission_deadline: string | null;
   check_in_meetings: CheckInMeeting[] | null;
+  target_fees: TargetFee[] | null;
+  evaluation_criteria: EvaluationCriterion[] | null;
   created_at: string;
   updated_at: string;
 }

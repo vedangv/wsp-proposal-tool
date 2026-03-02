@@ -9,6 +9,8 @@ class ProposalStatus(str, Enum):
     draft = "draft"
     in_review = "in_review"
     submitted = "submitted"
+    won = "won"
+    lost = "lost"
 
 
 DEFAULT_PHASES = ["Study", "Preliminary", "Detailed", "Tender", "Construction"]
@@ -16,6 +18,17 @@ DEFAULT_PHASES = ["Study", "Preliminary", "Detailed", "Tender", "Construction"]
 
 class CheckInMeeting(BaseModel):
     date: str
+    notes: str = ""
+
+
+class TargetFee(BaseModel):
+    description: str
+    amount: float
+
+
+class EvaluationCriterion(BaseModel):
+    criterion: str
+    weight: float = 0
     notes: str = ""
 
 
@@ -32,6 +45,8 @@ class ProposalCreate(BaseModel):
     gold_review_date: Optional[date] = None
     submission_deadline: Optional[date] = None
     check_in_meetings: Optional[list[CheckInMeeting]] = None
+    target_fees: Optional[list[TargetFee]] = None
+    evaluation_criteria: Optional[list[EvaluationCriterion]] = None
 
 
 class ProposalUpdate(BaseModel):
@@ -46,6 +61,8 @@ class ProposalUpdate(BaseModel):
     gold_review_date: Optional[date] = None
     submission_deadline: Optional[date] = None
     check_in_meetings: Optional[list[CheckInMeeting]] = None
+    target_fees: Optional[list[TargetFee]] = None
+    evaluation_criteria: Optional[list[EvaluationCriterion]] = None
 
 
 class ProposalOut(BaseModel):
@@ -62,6 +79,8 @@ class ProposalOut(BaseModel):
     gold_review_date: Optional[date]
     submission_deadline: Optional[date]
     check_in_meetings: Optional[list] = None
+    target_fees: Optional[list] = None
+    evaluation_criteria: Optional[list] = None
     created_at: datetime
     updated_at: datetime
 

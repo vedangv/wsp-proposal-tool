@@ -1,17 +1,27 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { proposalsApi } from "../api/proposals";
+import { proposalsApi, type Proposal } from "../api/proposals";
 import { templatesApi, type ProposalTemplate } from "../api/templates";
 import { useAuth } from "../context/AuthContext";
 
 const STATUS_STYLES: Record<string, string> = {
-  draft:     "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
-  active:    "bg-green-50 text-green-700 border border-green-200",
-  submitted: "bg-blue-50 text-blue-700 border border-blue-200",
-  won:       "bg-emerald-50 text-emerald-700 border border-emerald-200",
-  lost:      "bg-red-50 text-wsp-red border border-red-200",
+  draft:       "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
+  in_review:   "bg-amber-50 text-amber-700 border border-amber-200",
+  submitted:   "bg-blue-50 text-blue-700 border border-blue-200",
+  won:         "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  lost:        "bg-red-50 text-wsp-red border border-red-200",
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  in_review: "In Review",
+  submitted: "Submitted",
+  won: "Won",
+  lost: "Lost",
+};
+
+const ALL_STATUSES = ["draft", "in_review", "submitted", "won", "lost"];
 
 export default function ProposalsPage() {
   const { user, logout } = useAuth();
@@ -40,6 +50,12 @@ export default function ProposalsPage() {
       setShowForm(false);
       setForm({ proposal_number: "", title: "", client_name: "" });
     },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: Proposal["status"] }) =>
+      proposalsApi.update(id, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["proposals"] }),
   });
 
   const createFromTemplateMutation = useMutation({
@@ -281,10 +297,17 @@ export default function ProposalsPage() {
                     </td>
                     <td className="font-body text-wsp-dark font-medium">{p.title}</td>
                     <td className="text-wsp-muted">{p.client_name || "—"}</td>
-                    <td>
-                      <span className={`wsp-badge ${STATUS_STYLES[p.status] || STATUS_STYLES.draft}`}>
-                        {p.status}
-                      </span>
+                    <td onClick={e => e.stopPropagation()}>
+                      <select
+                        value={p.status}
+                        onChange={e => updateStatusMutation.mutate({ id: p.id, status: e.target.value as Proposal["status"] })}
+                        className={`wsp-badge ${STATUS_STYLES[p.status] || STATUS_STYLES.draft} cursor-pointer appearance-none pr-5 bg-[length:12px] bg-[right_4px_center] bg-no-repeat`}
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'/%3E%3C/svg%3E")` }}
+                      >
+                        {ALL_STATUSES.map(s => (
+                          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="text-right text-wsp-muted font-mono text-xs">
                       {new Date(p.updated_at).toLocaleDateString("en-AU", {

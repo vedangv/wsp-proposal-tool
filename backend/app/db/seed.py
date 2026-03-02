@@ -171,6 +171,19 @@ async def seed_demo_proposal(db: AsyncSession):
             {"date": (today + timedelta(days=3)).isoformat(), "notes": "Scope alignment & team roles"},
             {"date": (today + timedelta(days=8)).isoformat(), "notes": "Post red-review corrections"},
         ],
+        target_fees=[
+            {"description": "Engineering Design", "amount": 1250000},
+            {"description": "Environmental Assessment", "amount": 350000},
+            {"description": "Traffic Engineering", "amount": 280000},
+            {"description": "Construction Oversight", "amount": 450000},
+            {"description": "Project Management", "amount": 170000},
+        ],
+        evaluation_criteria=[
+            {"criterion": "Technical Approach", "weight": 35, "notes": "Design methodology and innovation"},
+            {"criterion": "Team Experience", "weight": 25, "notes": "Relevant highway widening projects"},
+            {"criterion": "Project Management", "weight": 15, "notes": "Schedule, risk management, QA/QC"},
+            {"criterion": "Price", "weight": 25, "notes": "Competitive fee proposal"},
+        ],
         created_by=alice_id,
     )
     db.add(proposal)

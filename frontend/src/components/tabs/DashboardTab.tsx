@@ -42,21 +42,37 @@ function MetricCard({ label, value, sub, color = "default" }: MetricCardProps) {
   );
 }
 
-/* ── Timeline Section ────────────────────────────── */
+/* ── Timeline Section (Calendar View) ────────────── */
 
-const MILESTONE_COLORS: Record<string, string> = {
-  kickoff: "bg-blue-500",
-  red_review: "bg-wsp-red",
-  gold_review: "bg-amber-500",
-  submission: "bg-emerald-600",
+const MILESTONE_BG: Record<string, string> = {
+  kickoff_date: "bg-blue-500",
+  red_review_date: "bg-wsp-red",
+  gold_review_date: "bg-amber-500",
+  submission_deadline: "bg-emerald-600",
 };
 
-const MILESTONE_DOT_COLORS: Record<string, string> = {
-  kickoff: "border-blue-500",
-  red_review: "border-wsp-red",
-  gold_review: "border-amber-500",
-  submission: "border-emerald-600",
+const MILESTONE_LABELS: Record<string, string> = {
+  kickoff_date: "Kickoff",
+  red_review_date: "Red Review",
+  gold_review_date: "Gold Review",
+  submission_deadline: "Submission",
 };
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function getMonthGrid(year: number, month: number) {
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const startPad = first.getDay();
+  const days: (number | null)[] = Array(startPad).fill(null);
+  for (let d = 1; d <= last.getDate(); d++) days.push(d);
+  while (days.length % 7 !== 0) days.push(null);
+  return days;
+}
+
+function toDateStr(y: number, m: number, d: number) {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
 
 function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }) {
   const qc = useQueryClient();
@@ -78,14 +94,47 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
     },
   });
 
-  const milestones = [
-    { key: "kickoff_date" as const, label: "Kickoff", date: dash.kickoff_date },
-    { key: "red_review_date" as const, label: "Red Review", date: dash.red_review_date },
-    { key: "gold_review_date" as const, label: "Gold Review", date: dash.gold_review_date },
-    { key: "submission_deadline" as const, label: "Submission", date: dash.submission_deadline },
-  ];
+  const milestoneKeys = ["kickoff_date", "red_review_date", "gold_review_date", "submission_deadline"] as const;
+  const milestones = milestoneKeys.map(key => ({
+    key,
+    label: MILESTONE_LABELS[key],
+    date: dash[key] as string | null,
+  }));
 
   const checkins: { date: string; notes: string }[] = dash.check_in_meetings || [];
+
+  // Build a lookup: dateStr → events
+  const dateEvents: Record<string, { type: "milestone"; key: string; label: string }[] | { type: "checkin"; notes: string }[]> = {};
+  const addEvent = (dateStr: string, event: any) => {
+    if (!dateEvents[dateStr]) dateEvents[dateStr] = [];
+    dateEvents[dateStr].push(event);
+  };
+  for (const m of milestones) {
+    if (m.date) addEvent(m.date, { type: "milestone", key: m.key, label: m.label });
+  }
+  for (const c of checkins) {
+    if (c.date) addEvent(c.date, { type: "checkin", notes: c.notes });
+  }
+
+  // Determine which months to show
+  const allDates = [...milestones.map(m => m.date), ...checkins.map(c => c.date)].filter(Boolean) as string[];
+  const months: { year: number; month: number }[] = [];
+  if (allDates.length > 0) {
+    const sorted = allDates.map(d => new Date(d + "T00:00:00")).sort((a, b) => a.getTime() - b.getTime());
+    let cur = new Date(sorted[0].getFullYear(), sorted[0].getMonth(), 1);
+    const end = new Date(sorted[sorted.length - 1].getFullYear(), sorted[sorted.length - 1].getMonth(), 1);
+    while (cur <= end) {
+      months.push({ year: cur.getFullYear(), month: cur.getMonth() });
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    }
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const formatDate = (d: string | null) => {
+    if (!d) return "—";
+    return new Date(d + "T00:00:00").toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+  };
 
   const openEdit = () => {
     setFormDates({
@@ -117,25 +166,6 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
     setFormMeetings(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Compute timeline bar positions — include check-in meetings
-  const allDates = [
-    ...milestones.map(m => m.date),
-    ...checkins.map(m => m.date),
-  ].filter(Boolean) as string[];
-  const minDate = allDates.length ? new Date(Math.min(...allDates.map(d => new Date(d).getTime()))) : null;
-  const maxDate = allDates.length ? new Date(Math.max(...allDates.map(d => new Date(d).getTime()))) : null;
-  const totalSpan = minDate && maxDate ? maxDate.getTime() - minDate.getTime() : 1;
-
-  const getPosition = (dateStr: string | null) => {
-    if (!dateStr || !minDate || totalSpan === 0) return 0;
-    return Math.min(100, Math.max(0, ((new Date(dateStr).getTime() - minDate.getTime()) / totalSpan) * 100));
-  };
-
-  const formatDate = (d: string | null) => {
-    if (!d) return "—";
-    return new Date(d + "T00:00:00").toLocaleDateString("en-CA", { month: "short", day: "numeric" });
-  };
-
   return (
     <div className="wsp-card p-5 mb-6">
       <div className="flex items-center justify-between mb-4">
@@ -158,88 +188,86 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
         </div>
       </div>
 
-      {/* Timeline bar */}
-      {allDates.length >= 2 && (
-        <div className="relative h-12 mb-2">
-          <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 rounded-full" />
-          {/* Today marker */}
-          {minDate && maxDate && (() => {
-            const todayPos = ((Date.now() - minDate.getTime()) / totalSpan) * 100;
-            if (todayPos >= 0 && todayPos <= 100) {
-              return (
-                <div className="absolute top-3 w-0.5 h-5 bg-wsp-dark/30" style={{ left: `${todayPos}%` }}>
-                  <span className="absolute -top-4 -translate-x-1/2 text-[9px] text-wsp-muted font-mono">Today</span>
+      {/* Calendar grid */}
+      {months.length > 0 ? (
+        <div className={`grid gap-4 ${months.length === 1 ? "grid-cols-1 max-w-xs" : months.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+          {months.map(({ year, month }) => {
+            const grid = getMonthGrid(year, month);
+            const monthName = new Date(year, month).toLocaleDateString("en-CA", { month: "long", year: "numeric" });
+            return (
+              <div key={`${year}-${month}`}>
+                <p className="text-xs font-display font-semibold text-wsp-dark mb-2 tracking-wide">{monthName}</p>
+                <div className="grid grid-cols-7 gap-px">
+                  {DAY_NAMES.map(d => (
+                    <div key={d} className="text-[9px] text-wsp-muted text-center font-mono pb-1">{d}</div>
+                  ))}
+                  {grid.map((day, i) => {
+                    if (day === null) return <div key={`pad-${i}`} />;
+                    const ds = toDateStr(year, month, day);
+                    const events = dateEvents[ds] || [];
+                    const isToday = ds === todayStr;
+                    const milestoneEvents = events.filter((e: any) => e.type === "milestone");
+                    const checkinEvents = events.filter((e: any) => e.type === "checkin");
+
+                    return (
+                      <div
+                        key={ds}
+                        className={`relative text-center py-1 text-xs rounded group
+                          ${isToday ? "bg-wsp-dark text-white font-bold" : "text-wsp-dark hover:bg-gray-50"}
+                          ${milestoneEvents.length > 0 ? "font-semibold" : ""}`}
+                      >
+                        {day}
+                        {/* Dots under the date */}
+                        {(milestoneEvents.length > 0 || checkinEvents.length > 0) && (
+                          <div className="flex justify-center gap-0.5 mt-0.5">
+                            {milestoneEvents.map((e: any, j: number) => (
+                              <div key={j} className={`w-1.5 h-1.5 rounded-full ${MILESTONE_BG[e.key]}`} />
+                            ))}
+                            {checkinEvents.map((_: any, j: number) => (
+                              <div key={`c${j}`} className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                            ))}
+                          </div>
+                        )}
+                        {/* Tooltip */}
+                        {events.length > 0 && (
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-wsp-dark text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-20 shadow-lg">
+                            {milestoneEvents.map((e: any, j: number) => (
+                              <div key={j}>{e.label}</div>
+                            ))}
+                            {checkinEvents.map((e: any, j: number) => (
+                              <div key={`c${j}`}>Check-in{e.notes ? `: ${e.notes}` : ""}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            }
-            return null;
-          })()}
-          {/* Check-in meeting markers (smaller, below the line) */}
-          {checkins.map((m, i) => m.date && (
-            <div
-              key={`checkin-${i}`}
-              className="absolute top-4 -translate-x-1/2 group"
-              style={{ left: `${getPosition(m.date)}%` }}
-            >
-              <div className="w-2 h-2 rounded-full bg-violet-400 ring-1 ring-white" />
-              <div className="absolute top-4 -translate-x-1/2 hidden group-hover:block bg-wsp-dark text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-10">
-                {formatDate(m.date)}: {m.notes || "Check-in"}
               </div>
-            </div>
-          ))}
-          {/* Milestone markers */}
-          {milestones.map(m => m.date && (
-            <div
-              key={m.key}
-              className="absolute top-3 -translate-x-1/2"
-              style={{ left: `${getPosition(m.date)}%` }}
-            >
-              <div className={`w-3.5 h-3.5 rounded-full ${MILESTONE_COLORS[m.key.replace("_date", "").replace("_deadline", "")] || "bg-gray-400"} ring-2 ring-white`} />
-              <span className="absolute top-5 -translate-x-1/2 text-[9px] text-wsp-muted font-mono whitespace-nowrap">
-                {m.label}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      ) : (
+        <p className="text-sm text-gray-300 italic text-center py-4">No dates set. Click Edit Timeline to get started.</p>
       )}
 
-      {/* Milestone dates + check-in summary in a compact row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-        {milestones.map(m => {
-          const colorKey = m.key.replace("_date", "").replace("_deadline", "");
-          return (
-            <div key={m.key} className="text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                <div className={`w-2 h-2 rounded-full border-2 ${MILESTONE_DOT_COLORS[colorKey] || "border-gray-400"}`} />
-                <p className="text-[10px] font-display tracking-wider uppercase text-wsp-muted">{m.label}</p>
-              </div>
-              <p className="text-sm font-mono text-wsp-dark">{formatDate(m.date)}</p>
-            </div>
-          );
-        })}
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mt-4 pt-3 border-t border-gray-100">
+        {milestones.filter(m => m.date).map(m => (
+          <div key={m.key} className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${MILESTONE_BG[m.key]}`} />
+            <span className="text-[10px] text-wsp-muted">{m.label}: <span className="font-mono text-wsp-dark">{formatDate(m.date)}</span></span>
+          </div>
+        ))}
+        {checkins.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-violet-400" />
+            <span className="text-[10px] text-wsp-muted">{checkins.length} Check-in{checkins.length !== 1 ? "s" : ""}</span>
+          </div>
+        )}
       </div>
 
-      {/* Check-ins summary */}
-      {checkins.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <div className="w-2 h-2 rounded-full bg-violet-400" />
-            <p className="text-[10px] font-display tracking-wider uppercase text-wsp-muted">
-              {checkins.length} Check-in{checkins.length !== 1 ? "s" : ""} Scheduled
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
-            {checkins.map((m, i) => (
-              <span key={i} className="text-xs text-wsp-muted">
-                <span className="font-mono text-wsp-dark">{formatDate(m.date)}</span>
-                {m.notes && <span className="ml-1">— {m.notes}</span>}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Edit SlideOver — all dates + meetings in one form */}
+      {/* Edit SlideOver */}
       <SlideOver open={slideOpen} onClose={() => setSlideOpen(false)} title="Edit Timeline">
         <div className="space-y-5">
           <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Milestone Dates</p>

@@ -9,6 +9,8 @@ class ProposalStatus(str, enum.Enum):
     draft = "draft"
     in_review = "in_review"
     submitted = "submitted"
+    won = "won"
+    lost = "lost"
 
 
 class Proposal(Base):
@@ -27,6 +29,8 @@ class Proposal(Base):
     gold_review_date = Column(Date, nullable=True)
     submission_deadline = Column(Date, nullable=True)
     check_in_meetings = Column(JSONB, default=list)
+    target_fees = Column(JSONB, default=list)
+    evaluation_criteria = Column(JSONB, default=list)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
