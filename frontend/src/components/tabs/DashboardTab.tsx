@@ -5,6 +5,7 @@ import { dashboardApi } from "../../api/dashboard";
 import { proposalsApi } from "../../api/proposals";
 import { disciplinesApi, STANDARD_DISCIPLINES, type Discipline } from "../../api/disciplines";
 import { complianceApi, type ComplianceItem } from "../../api/compliance";
+import SlideOver from "../SlideOver";
 
 interface Props {
   proposalId: string;
@@ -50,63 +51,89 @@ const MILESTONE_COLORS: Record<string, string> = {
   submission: "bg-emerald-600",
 };
 
+const MILESTONE_DOT_COLORS: Record<string, string> = {
+  kickoff: "border-blue-500",
+  red_review: "border-wsp-red",
+  gold_review: "border-amber-500",
+  submission: "border-emerald-600",
+};
+
 function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }) {
   const qc = useQueryClient();
-  const [editingField, setEditingField] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [showAddCheckin, setShowAddCheckin] = useState(false);
-  const [checkinDate, setCheckinDate] = useState("");
-  const [checkinNotes, setCheckinNotes] = useState("");
+  const [slideOpen, setSlideOpen] = useState(false);
+  const [formDates, setFormDates] = useState({
+    kickoff_date: "",
+    red_review_date: "",
+    gold_review_date: "",
+    submission_deadline: "",
+  });
+  const [formMeetings, setFormMeetings] = useState<{ date: string; notes: string }[]>([]);
 
   const updateMutation = useMutation({
     mutationFn: (data: Record<string, any>) => proposalsApi.update(proposalId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dashboard", proposalId] });
       qc.invalidateQueries({ queryKey: ["proposal", proposalId] });
-      setEditingField(null);
+      setSlideOpen(false);
     },
   });
 
   const milestones = [
-    { key: "kickoff_date", label: "Kickoff", date: dash.kickoff_date },
-    { key: "red_review_date", label: "Red Review", date: dash.red_review_date },
-    { key: "gold_review_date", label: "Gold Review", date: dash.gold_review_date },
-    { key: "submission_deadline", label: "Submission", date: dash.submission_deadline },
+    { key: "kickoff_date" as const, label: "Kickoff", date: dash.kickoff_date },
+    { key: "red_review_date" as const, label: "Red Review", date: dash.red_review_date },
+    { key: "gold_review_date" as const, label: "Gold Review", date: dash.gold_review_date },
+    { key: "submission_deadline" as const, label: "Submission", date: dash.submission_deadline },
   ];
 
-  const startEdit = (key: string, currentDate: string | null) => {
-    setEditingField(key);
-    setEditValue(currentDate || "");
+  const checkins: { date: string; notes: string }[] = dash.check_in_meetings || [];
+
+  const openEdit = () => {
+    setFormDates({
+      kickoff_date: dash.kickoff_date || "",
+      red_review_date: dash.red_review_date || "",
+      gold_review_date: dash.gold_review_date || "",
+      submission_deadline: dash.submission_deadline || "",
+    });
+    setFormMeetings(checkins.map(m => ({ ...m })));
+    setSlideOpen(true);
   };
 
-  const saveEdit = (key: string) => {
-    updateMutation.mutate({ [key]: editValue || null });
+  const saveAll = () => {
+    updateMutation.mutate({
+      ...formDates,
+      check_in_meetings: formMeetings,
+    });
   };
 
-  const addCheckin = () => {
-    if (!checkinDate) return;
-    const meetings = [...(dash.check_in_meetings || []), { date: checkinDate, notes: checkinNotes }];
-    updateMutation.mutate({ check_in_meetings: meetings });
-    setCheckinDate("");
-    setCheckinNotes("");
-    setShowAddCheckin(false);
+  const addMeeting = () => {
+    setFormMeetings(prev => [...prev, { date: "", notes: "" }]);
   };
 
-  const removeCheckin = (idx: number) => {
-    const meetings = [...(dash.check_in_meetings || [])];
-    meetings.splice(idx, 1);
-    updateMutation.mutate({ check_in_meetings: meetings });
+  const updateMeeting = (idx: number, field: "date" | "notes", value: string) => {
+    setFormMeetings(prev => prev.map((m, i) => i === idx ? { ...m, [field]: value } : m));
   };
 
-  // Compute timeline bar positions
-  const dates = milestones.map(m => m.date).filter(Boolean) as string[];
-  const minDate = dates.length ? new Date(Math.min(...dates.map(d => new Date(d).getTime()))) : null;
-  const maxDate = dates.length ? new Date(Math.max(...dates.map(d => new Date(d).getTime()))) : null;
+  const removeMeeting = (idx: number) => {
+    setFormMeetings(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Compute timeline bar positions — include check-in meetings
+  const allDates = [
+    ...milestones.map(m => m.date),
+    ...checkins.map(m => m.date),
+  ].filter(Boolean) as string[];
+  const minDate = allDates.length ? new Date(Math.min(...allDates.map(d => new Date(d).getTime()))) : null;
+  const maxDate = allDates.length ? new Date(Math.max(...allDates.map(d => new Date(d).getTime()))) : null;
   const totalSpan = minDate && maxDate ? maxDate.getTime() - minDate.getTime() : 1;
 
   const getPosition = (dateStr: string | null) => {
     if (!dateStr || !minDate || totalSpan === 0) return 0;
-    return ((new Date(dateStr).getTime() - minDate.getTime()) / totalSpan) * 100;
+    return Math.min(100, Math.max(0, ((new Date(dateStr).getTime() - minDate.getTime()) / totalSpan) * 100));
+  };
+
+  const formatDate = (d: string | null) => {
+    if (!d) return "—";
+    return new Date(d + "T00:00:00").toLocaleDateString("en-CA", { month: "short", day: "numeric" });
   };
 
   return (
@@ -115,41 +142,60 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
         <h4 className="text-xs font-display tracking-widest uppercase text-wsp-muted">
           Proposal Timeline
         </h4>
-        {dash.days_remaining != null && (
-          <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-bold
-            ${dash.days_remaining <= 3 ? "bg-red-100 text-wsp-red" :
-              dash.days_remaining <= 7 ? "bg-amber-100 text-amber-700" :
-              "bg-emerald-100 text-emerald-700"}`}>
-            {dash.days_remaining > 0 ? `${dash.days_remaining} days remaining` :
-             dash.days_remaining === 0 ? "Due today" : `${Math.abs(dash.days_remaining)} days overdue`}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {dash.days_remaining != null && (
+            <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-bold
+              ${dash.days_remaining <= 3 ? "bg-red-100 text-wsp-red" :
+                dash.days_remaining <= 7 ? "bg-amber-100 text-amber-700" :
+                "bg-emerald-100 text-emerald-700"}`}>
+              {dash.days_remaining > 0 ? `${dash.days_remaining} days remaining` :
+               dash.days_remaining === 0 ? "Due today" : `${Math.abs(dash.days_remaining)} days overdue`}
+            </span>
+          )}
+          <button onClick={openEdit} className="text-xs text-wsp-muted hover:text-wsp-dark border border-wsp-border rounded px-2.5 py-1 hover:border-wsp-dark/30 transition-colors">
+            Edit Timeline
+          </button>
+        </div>
       </div>
 
       {/* Timeline bar */}
-      {dates.length >= 2 && (
-        <div className="relative h-10 mb-4">
-          <div className="absolute top-4 left-0 right-0 h-1 bg-gray-200 rounded-full" />
+      {allDates.length >= 2 && (
+        <div className="relative h-12 mb-2">
+          <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 rounded-full" />
           {/* Today marker */}
           {minDate && maxDate && (() => {
             const todayPos = ((Date.now() - minDate.getTime()) / totalSpan) * 100;
             if (todayPos >= 0 && todayPos <= 100) {
               return (
-                <div className="absolute top-2 w-0.5 h-5 bg-wsp-dark/30" style={{ left: `${todayPos}%` }}>
+                <div className="absolute top-3 w-0.5 h-5 bg-wsp-dark/30" style={{ left: `${todayPos}%` }}>
                   <span className="absolute -top-4 -translate-x-1/2 text-[9px] text-wsp-muted font-mono">Today</span>
                 </div>
               );
             }
             return null;
           })()}
+          {/* Check-in meeting markers (smaller, below the line) */}
+          {checkins.map((m, i) => m.date && (
+            <div
+              key={`checkin-${i}`}
+              className="absolute top-4 -translate-x-1/2 group"
+              style={{ left: `${getPosition(m.date)}%` }}
+            >
+              <div className="w-2 h-2 rounded-full bg-violet-400 ring-1 ring-white" />
+              <div className="absolute top-4 -translate-x-1/2 hidden group-hover:block bg-wsp-dark text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-10">
+                {formatDate(m.date)}: {m.notes || "Check-in"}
+              </div>
+            </div>
+          ))}
+          {/* Milestone markers */}
           {milestones.map(m => m.date && (
             <div
               key={m.key}
-              className="absolute top-2 -translate-x-1/2"
+              className="absolute top-3 -translate-x-1/2"
               style={{ left: `${getPosition(m.date)}%` }}
             >
-              <div className={`w-3 h-3 rounded-full ${MILESTONE_COLORS[m.key.replace("_date", "").replace("_deadline", "")] || "bg-gray-400"} ring-2 ring-white`} />
-              <span className="absolute top-4 -translate-x-1/2 text-[9px] text-wsp-muted font-mono whitespace-nowrap">
+              <div className={`w-3.5 h-3.5 rounded-full ${MILESTONE_COLORS[m.key.replace("_date", "").replace("_deadline", "")] || "bg-gray-400"} ring-2 ring-white`} />
+              <span className="absolute top-5 -translate-x-1/2 text-[9px] text-wsp-muted font-mono whitespace-nowrap">
                 {m.label}
               </span>
             </div>
@@ -157,64 +203,100 @@ function TimelineSection({ proposalId, dash }: { proposalId: string; dash: any }
         </div>
       )}
 
-      {/* Milestone dates grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-        {milestones.map(m => (
-          <div key={m.key} className="text-center">
-            <p className="text-[10px] font-display tracking-wider uppercase text-wsp-muted mb-1">{m.label}</p>
-            {editingField === m.key ? (
-              <div className="flex gap-1">
-                <input
-                  type="date"
-                  className="border rounded px-2 py-1 text-xs w-full"
-                  value={editValue}
-                  onChange={e => setEditValue(e.target.value)}
-                  autoFocus
-                />
-                <button onClick={() => saveEdit(m.key)} className="text-emerald-600 text-xs font-bold px-1">OK</button>
-                <button onClick={() => setEditingField(null)} className="text-gray-400 text-xs px-1">X</button>
+      {/* Milestone dates + check-in summary in a compact row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        {milestones.map(m => {
+          const colorKey = m.key.replace("_date", "").replace("_deadline", "");
+          return (
+            <div key={m.key} className="text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                <div className={`w-2 h-2 rounded-full border-2 ${MILESTONE_DOT_COLORS[colorKey] || "border-gray-400"}`} />
+                <p className="text-[10px] font-display tracking-wider uppercase text-wsp-muted">{m.label}</p>
               </div>
-            ) : (
-              <button
-                onClick={() => startEdit(m.key, m.date)}
-                className="text-sm font-mono text-wsp-dark hover:text-wsp-red transition-colors"
-              >
-                {m.date || "Set date"}
-              </button>
-            )}
-          </div>
-        ))}
+              <p className="text-sm font-mono text-wsp-dark">{formatDate(m.date)}</p>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Check-in meetings */}
-      <div className="mt-4 border-t pt-3">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] font-display tracking-wider uppercase text-wsp-muted">Check-in Meetings</p>
-          <button
-            onClick={() => setShowAddCheckin(!showAddCheckin)}
-            className="text-xs text-blue-600 hover:text-blue-800"
-          >
-            + Add Check-in
-          </button>
+      {/* Check-ins summary */}
+      {checkins.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="w-2 h-2 rounded-full bg-violet-400" />
+            <p className="text-[10px] font-display tracking-wider uppercase text-wsp-muted">
+              {checkins.length} Check-in{checkins.length !== 1 ? "s" : ""} Scheduled
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {checkins.map((m, i) => (
+              <span key={i} className="text-xs text-wsp-muted">
+                <span className="font-mono text-wsp-dark">{formatDate(m.date)}</span>
+                {m.notes && <span className="ml-1">— {m.notes}</span>}
+              </span>
+            ))}
+          </div>
         </div>
-        {showAddCheckin && (
-          <div className="flex gap-2 mb-2">
-            <input type="date" className="border rounded px-2 py-1 text-xs" value={checkinDate} onChange={e => setCheckinDate(e.target.value)} />
-            <input type="text" className="border rounded px-2 py-1 text-xs flex-1" placeholder="Notes..." value={checkinNotes} onChange={e => setCheckinNotes(e.target.value)} />
-            <button onClick={addCheckin} className="text-xs bg-blue-600 text-white px-2 py-1 rounded">Add</button>
+      )}
+
+      {/* Edit SlideOver — all dates + meetings in one form */}
+      <SlideOver open={slideOpen} onClose={() => setSlideOpen(false)} title="Edit Timeline">
+        <div className="space-y-5">
+          <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Milestone Dates</p>
+
+          {([
+            { key: "kickoff_date" as const, label: "Kickoff Date", color: "border-l-blue-500" },
+            { key: "red_review_date" as const, label: "Red Review", color: "border-l-red-500" },
+            { key: "gold_review_date" as const, label: "Gold Review", color: "border-l-amber-500" },
+            { key: "submission_deadline" as const, label: "Submission Deadline", color: "border-l-emerald-600" },
+          ]).map(m => (
+            <div key={m.key} className={`border-l-4 ${m.color} pl-3`}>
+              <label className="text-xs text-wsp-muted block mb-1">{m.label}</label>
+              <input
+                type="date"
+                className="border rounded px-3 py-2 w-full text-sm"
+                value={formDates[m.key]}
+                onChange={e => setFormDates(prev => ({ ...prev, [m.key]: e.target.value }))}
+              />
+            </div>
+          ))}
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-display tracking-widest uppercase text-wsp-muted">Check-in Meetings</p>
+              <button onClick={addMeeting} className="text-xs text-blue-600 hover:text-blue-800">+ Add</button>
+            </div>
+            {formMeetings.length === 0 && (
+              <p className="text-xs text-gray-300 italic">No check-ins. Click + Add to schedule one.</p>
+            )}
+            {formMeetings.map((m, i) => (
+              <div key={i} className="flex gap-2 mb-2 items-start">
+                <div className="flex-1 space-y-1">
+                  <input
+                    type="date"
+                    className="border rounded px-3 py-1.5 w-full text-sm"
+                    value={m.date}
+                    onChange={e => updateMeeting(i, "date", e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="border rounded px-3 py-1.5 w-full text-sm"
+                    placeholder="Notes (optional)"
+                    value={m.notes}
+                    onChange={e => updateMeeting(i, "notes", e.target.value)}
+                  />
+                </div>
+                <button onClick={() => removeMeeting(i)} className="text-red-400 hover:text-red-600 text-xs mt-2">Remove</button>
+              </div>
+            ))}
           </div>
-        )}
-        {(dash.check_in_meetings || []).length === 0 && !showAddCheckin && (
-          <p className="text-xs text-gray-300 italic">No check-ins scheduled</p>
-        )}
-        {(dash.check_in_meetings || []).map((m: any, i: number) => (
-          <div key={i} className="flex items-center gap-2 text-xs py-1">
-            <span className="font-mono text-wsp-dark">{m.date}</span>
-            <span className="text-wsp-muted flex-1">{m.notes || "—"}</span>
-            <button onClick={() => removeCheckin(i)} className="text-red-400 hover:text-red-600">X</button>
+
+          <div className="flex gap-2 pt-4 border-t">
+            <button onClick={saveAll} className="wsp-btn-primary">Save Timeline</button>
+            <button onClick={() => setSlideOpen(false)} className="wsp-btn-ghost">Cancel</button>
           </div>
-        ))}
-      </div>
+        </div>
+      </SlideOver>
     </div>
   );
 }
