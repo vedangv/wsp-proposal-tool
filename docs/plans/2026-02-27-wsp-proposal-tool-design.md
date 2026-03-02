@@ -352,14 +352,18 @@ The backend exposes a `/agents` API namespace from day one. PoC implements one d
 POST /api/agents/cv-fetch                  -- given people list, retrieves CVs
 POST /api/agents/rfp-extract               -- extract scope sections from RFP
 POST /api/agents/relevant-projects-fetch   -- find relevant projects from RFP requirements
+POST /api/agents/deliverables-fetch        -- extract deliverables from RFP
+POST /api/agents/drawings-fetch            -- generate drawing list from RFP/WBS
 GET  /api/agents/jobs/{job_id}             -- async job polling endpoint
 ```
 
-### PoC Demo Agents (3 implemented with mock data)
+### PoC Demo Agents (5 implemented with mock data)
 
 1. **CV Fetcher** — People tab "Fetch CVs" button. Returns mock CV summaries per person.
 2. **RFP Extractor** — Overview tab "Fetch from RFP" button. Returns mock scope sections.
 3. **Relevant Projects Fetcher** — Relevant Projects tab "Fetch from RFP" button. Returns AI-suggested relevant projects with Accept/Dismiss review cards.
+4. **Deliverables Fetcher** — Deliverables tab "Fetch from RFP" button. Returns 8 deliverables extracted from the RFP with Accept/Dismiss review cards.
+5. **Drawings Fetcher** — Drawing List tab "Fetch from RFP" button. Returns 10 drawings generated from the RFP/WBS with Accept/Dismiss review cards.
 
 All agents follow the same async pattern: POST creates a job → mock 2s delay → poll for results.
 
@@ -383,6 +387,7 @@ All agents follow the same async pattern: POST creates a job → mock 2s delay �
 | Sprint 12 | Disciplines tracker, compliance checklist, timeline calendar, Railway deployment | Done |
 | Sprint 13 | Status dropdown (won/lost), full calendar view, target fees, evaluation criteria | Done |
 | Sprint 14 | Client History tab, demo drawings/relevant projects, "Fetch from RFP" agent, print summary enhancements | Done |
+| Sprint 15 | Deliverables + Drawings agent-driven (Fetch from RFP buttons), remove status/due columns from both tabs | Done |
 
 ---
 
@@ -413,6 +418,7 @@ wsp-proposal-tool/
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── models/
+│   │   ├── schemas/
 │   │   ├── routes/
 │   │   │   ├── proposals.py
 │   │   │   ├── wbs.py
@@ -421,7 +427,17 @@ wsp-proposal-tool/
 │   │   │   ├── schedule.py
 │   │   │   ├── deliverables.py
 │   │   │   ├── drawings.py
+│   │   │   ├── client_history.py
+│   │   │   ├── disciplines.py
+│   │   │   ├── compliance.py
+│   │   │   ├── dashboard.py
 │   │   │   └── agents.py
+│   │   ├── agents/
+│   │   │   ├── cv_fetcher.py
+│   │   │   ├── rfp_extractor.py
+│   │   │   ├── relevant_projects_fetcher.py
+│   │   │   ├── deliverables_fetcher.py
+│   │   │   └── drawings_fetcher.py
 │   │   ├── websockets/
 │   │   └── db/
 ├── frontend/
@@ -429,7 +445,7 @@ wsp-proposal-tool/
 │   ├── src/
 │   │   ├── pages/
 │   │   ├── components/
-│   │   │   ├── tabs/
+│   │   │   ├── tabs/          -- 11 tab components
 │   │   │   ├── tables/
 │   │   │   └── gantt/
 │   │   ├── hooks/

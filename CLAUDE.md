@@ -78,7 +78,7 @@ Every table has a `proposal_id` foreign key. Always scope queries to a proposal.
 Each proposal has a WebSocket room keyed by `proposal_id`. On any field edit, broadcast `{ table, row_id, field, value, updated_by }` to all connected clients in that room. Last-write-wins for conflicts.
 
 ### Agent API namespace
-All agent endpoints live under `/api/agents/`. Agents are async — return a `job_id` immediately, poll `/api/agents/jobs/{job_id}` for status. This pattern must be preserved for all future agents.
+All agent endpoints live under `/api/agents/`. Agents are async — return a `job_id` immediately, poll `/api/agents/jobs/{job_id}` for status. This pattern must be preserved for all future agents. Current agents: `cv_fetcher`, `rfp_extractor`, `relevant_projects_fetcher`, `deliverables_fetcher`, `drawings_fetcher`.
 
 ### No custom formula engine
 Pricing Matrix totals are computed server-side (hours × rate). No client-side formula evaluation. Keep it structured.
@@ -118,6 +118,7 @@ Scope Sections         (proposal_id only — rich text)
 | 12 | Disciplines tracker, compliance checklist, timeline calendar, Railway deploy | Done |
 | 13 | Status dropdown (won/lost), full calendar, target fees, evaluation criteria | Done |
 | 14 | Client History tab, demo data (drawings/projects), Fetch from RFP agent, print enhancements | Done |
+| 15 | Deliverables + Drawings agent-driven (Fetch from RFP), remove status/due columns | Done |
 
 ---
 
