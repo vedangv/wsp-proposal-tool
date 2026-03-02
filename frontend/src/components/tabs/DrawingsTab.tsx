@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { drawingsApi, type Drawing, type DrawingFormat, type DrawingStatus } from "../../api/drawings";
+import { drawingsApi, type Drawing, type DrawingFormat } from "../../api/drawings";
 import { wbsApi, type WBSItem } from "../../api/wbs";
 import { deliverablesApi, type Deliverable } from "../../api/deliverables";
+import { agentsApi, type DrawingResult } from "../../api/agents";
 
 interface Props { proposalId: string; }
 
@@ -10,18 +11,7 @@ const FORMAT_LABELS: Record<DrawingFormat, string> = {
   pdf: "PDF", dwg: "DWG", revit: "Revit", other: "Other",
 };
 
-const STATUS_STYLES: Record<DrawingStatus, string> = {
-  tbd:         "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
-  in_progress: "bg-blue-50 text-blue-700 border border-blue-200",
-  complete:    "bg-emerald-50 text-emerald-700 border border-emerald-200",
-};
-
 const FORMATS: DrawingFormat[] = ["pdf", "dwg", "revit", "other"];
-const STATUSES: DrawingStatus[] = ["tbd", "in_progress", "complete"];
-const STATUS_LABELS: Record<DrawingStatus, string> = {
-  tbd: "TBD", in_progress: "In Progress", complete: "Complete",
-};
-
 const DISCIPLINES = ["Civil", "Structural", "Mechanical", "Electrical", "Environmental", "Survey", "Other"];
 
 export default function DrawingsTab({ proposalId }: Props) {
@@ -29,6 +19,9 @@ export default function DrawingsTab({ proposalId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Drawing>>({});
   const [filterDiscipline, setFilterDiscipline] = useState<string>("");
+  const [fetching, setFetching] = useState(false);
+  const [fetchResults, setFetchResults] = useState<DrawingResult[] | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: drawings = [], isLoading } = useQuery({
     queryKey: ["drawings", proposalId],
@@ -47,7 +40,7 @@ export default function DrawingsTab({ proposalId }: Props) {
 
   const createMutation = useMutation({
     mutationFn: () => drawingsApi.create(proposalId, {
-      title: "New Drawing", format: "pdf", status: "tbd",
+      title: "New Drawing", format: "pdf",
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["drawings", proposalId] }),
   });
@@ -70,6 +63,49 @@ export default function DrawingsTab({ proposalId }: Props) {
     },
   });
 
+  const startFetch = useCallback(async () => {
+    setFetching(true);
+    setFetchResults(null);
+    try {
+      const { job_id } = await agentsApi.startDrawingsFetch(proposalId);
+      pollRef.current = setInterval(async () => {
+        try {
+          const job = await agentsApi.pollJob(job_id);
+          if (job.status === "complete" && job.result) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setFetchResults(job.result as unknown as DrawingResult[]);
+            setFetching(false);
+          } else if (job.status === "error") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setFetching(false);
+          }
+        } catch {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setFetching(false);
+        }
+      }, 1000);
+    } catch {
+      setFetching(false);
+    }
+  }, [proposalId]);
+
+  const acceptResult = async (r: DrawingResult) => {
+    await drawingsApi.create(proposalId, {
+      drawing_number: r.drawing_number,
+      title: r.title,
+      discipline: r.discipline,
+      scale: r.scale,
+      format: r.format as DrawingFormat,
+      responsible_party: r.responsible_party,
+    });
+    qc.invalidateQueries({ queryKey: ["drawings", proposalId] });
+    setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
+  const dismissResult = (r: DrawingResult) => {
+    setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
   const startEdit = (d: Drawing) => {
     setEditingId(d.id);
     setEditValues({
@@ -80,10 +116,8 @@ export default function DrawingsTab({ proposalId }: Props) {
       discipline: d.discipline || "",
       scale: d.scale || "",
       format: d.format,
-      due_date: d.due_date || "",
       responsible_party: d.responsible_party || "",
       revision: d.revision || "",
-      status: d.status,
     });
   };
 
@@ -107,11 +141,78 @@ export default function DrawingsTab({ proposalId }: Props) {
     <div>
       {/* Header */}
       <div className="flex items-end justify-between mb-5">
-        <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Drawing List</h3>
-        <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
-          + Add Drawing
-        </button>
+        <div>
+          <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Drawing List</h3>
+          <p className="text-xs text-wsp-muted font-body mt-0.5">
+            Expected drawings if the project is awarded
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={startFetch}
+            disabled={fetching}
+            className="px-4 py-2 text-xs font-display tracking-wide rounded border
+              bg-purple-600 text-white border-purple-600 hover:bg-purple-700
+              disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {fetching && (
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {fetching ? "Analyzing RFP..." : "Fetch from RFP"}
+          </button>
+          <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
+            + Add Drawing
+          </button>
+        </div>
       </div>
+
+      {/* Agent fetch results */}
+      {fetchResults && fetchResults.length > 0 && (
+        <div className="mb-5 space-y-3">
+          <h4 className="text-xs font-display tracking-widest uppercase text-purple-600 font-semibold">
+            AI Suggestions — Review & Accept
+          </h4>
+          {fetchResults.map((r, i) => (
+            <div key={i} className="wsp-card border-purple-200 border-l-4 border-l-purple-500">
+              <div className="p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <span className="font-mono text-wsp-red text-xs">{r.drawing_number}</span>
+                      <span className="font-display font-semibold text-wsp-dark text-sm">{r.title}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span className="text-xs text-wsp-muted font-body">{r.discipline}</span>
+                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">
+                        {FORMAT_LABELS[r.format as DrawingFormat] || r.format.toUpperCase()}
+                      </span>
+                      <span className="text-xs text-wsp-muted font-mono">{r.scale}</span>
+                      <span className="text-xs text-wsp-muted font-body">Responsible: {r.responsible_party}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => acceptResult(r)}
+                      className="text-xs px-3 py-1.5 border border-green-300 text-green-700 hover:bg-green-50 rounded font-display tracking-wide"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => dismissResult(r)}
+                      className="text-xs px-3 py-1.5 border border-wsp-border text-wsp-muted hover:text-wsp-dark rounded"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4">
@@ -148,9 +249,7 @@ export default function DrawingsTab({ proposalId }: Props) {
               <th className="w-16">Rev.</th>
               <th className="w-24">WBS</th>
               <th className="w-28">Deliverable</th>
-              <th className="w-24">Due</th>
               <th>Responsible</th>
-              <th className="w-28">Status</th>
               <th className="w-20"></th>
             </tr>
           </thead>
@@ -198,15 +297,7 @@ export default function DrawingsTab({ proposalId }: Props) {
                         ))}
                       </select>
                     </td>
-                    <td><input type="date" className="wsp-input font-mono text-xs" value={editValues.due_date || ""} onChange={e => setEditValues(v => ({ ...v, due_date: e.target.value }))} /></td>
                     <td><input className="wsp-input w-full" value={editValues.responsible_party || ""} onChange={e => setEditValues(v => ({ ...v, responsible_party: e.target.value }))} /></td>
-                    <td>
-                      <select className="wsp-input w-full text-xs"
-                        value={editValues.status || "tbd"}
-                        onChange={e => setEditValues(v => ({ ...v, status: e.target.value as DrawingStatus }))}>
-                        {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                      </select>
-                    </td>
                     <td>
                       <div className="flex gap-1">
                         <button onClick={() => updateMutation.mutate({ id: d.id, data: editValues })} className="text-green-700 text-xs px-2 py-1 border border-green-300 hover:bg-green-50">Save</button>
@@ -228,13 +319,7 @@ export default function DrawingsTab({ proposalId }: Props) {
                     <td className="font-mono text-xs text-wsp-muted">{d.revision || "—"}</td>
                     <td><span className="font-mono text-wsp-red text-xs">{wbsLabel(d.wbs_id)}</span></td>
                     <td><span className="font-mono text-xs text-wsp-muted">{deliverableLabel(d.deliverable_id)}</span></td>
-                    <td className="font-mono text-xs text-wsp-muted">{d.due_date || "—"}</td>
                     <td className="text-wsp-muted">{d.responsible_party || "—"}</td>
-                    <td>
-                      <span className={`wsp-badge ${STATUS_STYLES[d.status]} text-[10px]`}>
-                        {STATUS_LABELS[d.status]}
-                      </span>
-                    </td>
                     <td>
                       <div className="flex gap-2">
                         <button onClick={() => startEdit(d)} className="text-wsp-muted hover:text-wsp-dark text-xs">Edit</button>
@@ -249,7 +334,7 @@ export default function DrawingsTab({ proposalId }: Props) {
         </table>
         {filtered.length === 0 && !isLoading && (
           <p className="text-center py-12 text-wsp-muted text-sm font-body">
-            {drawings.length === 0 ? "No drawings yet. Add one." : "No drawings match the current filters."}
+            {drawings.length === 0 ? "No drawings yet. Use \"Fetch from RFP\" to generate a drawing list or add one manually." : "No drawings match the current filters."}
           </p>
         )}
       </div>

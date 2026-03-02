@@ -13,7 +13,6 @@ from app.models.schedule import ScheduleItem
 from app.models.scope import ScopeSection
 from app.models.discipline import ProposalDiscipline
 from app.models.compliance import ComplianceItem
-from app.models.drawing import Drawing, DrawingFormat, DrawingStatus
 from app.models.relevant_project import RelevantProject
 from app.models.client_outreach import ClientOutreach
 
@@ -427,31 +426,8 @@ async def seed_demo_proposal(db: AsyncSession):
             order_index=order,
         ))
 
-    # --- Drawings (10 items for Highway 401) ---
-    drawing_data = [
-        ("DWG-001", "General Arrangement Plan", "Civil", "1:2000", DrawingFormat.dwg, "3", "Tom Fitzgerald", DrawingStatus.in_progress),
-        ("DWG-002", "Horizontal Alignment — STA 0+000 to 2+500", "Civil", "1:1000", DrawingFormat.dwg, "3.1", "Tom Fitzgerald", DrawingStatus.in_progress),
-        ("DWG-003", "Typical Cross Sections", "Civil", "1:50", DrawingFormat.dwg, "3.2", "Tom Fitzgerald", DrawingStatus.complete),
-        ("DWG-004", "Pavement Structure Details", "Civil", "1:20", DrawingFormat.dwg, "3.3", "Anika Sharma", DrawingStatus.tbd),
-        ("DWG-005", "Drainage Plan & Profile", "Civil", "1:1000", DrawingFormat.dwg, "4.1", "Priya Nair", DrawingStatus.tbd),
-        ("DWG-006", "Bridge General Arrangement", "Structural", "1:200", DrawingFormat.dwg, "3.1", "James Okafor", DrawingStatus.in_progress),
-        ("DWG-007", "Traffic Staging Plan — Phase 1", "Civil", "1:2000", DrawingFormat.dwg, "5.1", "Tom Fitzgerald", DrawingStatus.tbd),
-        ("DWG-008", "Signage & Pavement Markings", "Civil", "1:1000", DrawingFormat.dwg, "5.2", "Anika Sharma", DrawingStatus.tbd),
-        ("DWG-009", "Environmental Constraints Map", "Environmental", "1:5000", DrawingFormat.pdf, "6", "Priya Nair", DrawingStatus.complete),
-        ("DWG-010", "Topographic Survey Base Plan", "Survey", "1:1000", DrawingFormat.dwg, "2.1", "Tom Fitzgerald", DrawingStatus.complete),
-    ]
-    for dwg_num, title, disc, scale, fmt_val, wbs_code, resp, status in drawing_data:
-        db.add(Drawing(
-            proposal_id=proposal_id,
-            wbs_id=wbs_ids.get(wbs_code),
-            drawing_number=dwg_num,
-            title=title,
-            discipline=disc,
-            scale=scale,
-            format=fmt_val,
-            responsible_party=resp,
-            status=status,
-        ))
+    # --- Drawings ---
+    # Not pre-seeded — use the "Fetch from RFP" agent button on the Drawing List tab
 
     # --- Relevant Projects (4 items) ---
     relevant_data = [

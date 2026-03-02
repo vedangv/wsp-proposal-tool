@@ -25,6 +25,15 @@ export interface RFPScopeResult {
   content: string;
 }
 
+export interface DrawingResult {
+  drawing_number: string;
+  title: string;
+  discipline: string;
+  scale: string;
+  format: string;
+  responsible_party: string;
+}
+
 export interface DeliverableResult {
   deliverable_ref: string;
   title: string;
@@ -64,6 +73,11 @@ export const agentsApi = {
 
   startDeliverablesFetch: (proposalId: string) =>
     api.post<{ job_id: string; status: string }>("/api/agents/deliverables-fetch", {
+      proposal_id: proposalId,
+    }).then(r => r.data),
+
+  startDrawingsFetch: (proposalId: string) =>
+    api.post<{ job_id: string; status: string }>("/api/agents/drawings-fetch", {
       proposal_id: proposalId,
     }).then(r => r.data),
 

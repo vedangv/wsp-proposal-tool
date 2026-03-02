@@ -390,7 +390,7 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
                   <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Discipline</th>
                   <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-16">Scale</th>
                   <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-16">Format</th>
-                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Status</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Responsible</th>
                 </tr>
               </thead>
               <tbody>
@@ -401,11 +401,7 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
                     <td className="py-1 text-wsp-muted text-xs">{d.discipline || "—"}</td>
                     <td className="py-1 font-mono text-xs text-wsp-muted">{d.scale || "—"}</td>
                     <td className="py-1 text-xs text-wsp-muted uppercase">{d.format}</td>
-                    <td className="py-1 text-xs">
-                      <span className={`${d.status === "complete" ? "text-emerald-600" : d.status === "in_progress" ? "text-blue-600" : "text-gray-400"}`}>
-                        {d.status.replace("_", " ")}
-                      </span>
-                    </td>
+                    <td className="py-1 text-xs text-wsp-muted">{d.responsible_party || "—"}</td>
                   </tr>
                 ))}
               </tbody>
