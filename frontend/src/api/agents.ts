@@ -25,6 +25,14 @@ export interface RFPScopeResult {
   content: string;
 }
 
+export interface DeliverableResult {
+  deliverable_ref: string;
+  title: string;
+  type: string;
+  description: string;
+  responsible_party: string;
+}
+
 export interface RelevantProjectResult {
   project_name: string;
   client: string;
@@ -51,6 +59,11 @@ export const agentsApi = {
 
   startRelevantProjectsFetch: (proposalId: string) =>
     api.post<{ job_id: string; status: string }>("/api/agents/relevant-projects-fetch", {
+      proposal_id: proposalId,
+    }).then(r => r.data),
+
+  startDeliverablesFetch: (proposalId: string) =>
+    api.post<{ job_id: string; status: string }>("/api/agents/deliverables-fetch", {
       proposal_id: proposalId,
     }).then(r => r.data),
 

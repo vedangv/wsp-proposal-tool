@@ -10,7 +10,6 @@ from app.models.people import ProposedPerson
 from app.models.wbs import WBSItem
 from app.models.pricing import PricingRow
 from app.models.schedule import ScheduleItem
-from app.models.deliverable import Deliverable, DeliverableType, DeliverableStatus
 from app.models.scope import ScopeSection
 from app.models.discipline import ProposalDiscipline
 from app.models.compliance import ComplianceItem
@@ -347,27 +346,8 @@ async def seed_demo_proposal(db: AsyncSession):
             phase=phase,
         ))
 
-    # --- Deliverables (8 items) ---
-    deliverable_data = [
-        ("D-001", "Preliminary Design Report", DeliverableType.report, "3.1", "Tom Fitzgerald", DeliverableStatus.in_progress),
-        ("D-002", "Environmental Compliance Report", DeliverableType.report, "6", "Priya Nair", DeliverableStatus.tbd),
-        ("D-003", "Traffic Impact Assessment", DeliverableType.report, "5.1", "Tom Fitzgerald", DeliverableStatus.tbd),
-        ("D-004", "30% Design Drawings", DeliverableType.drawing_package, "3.2", "Tom Fitzgerald", DeliverableStatus.tbd),
-        ("D-005", "60% Design Drawings", DeliverableType.drawing_package, "3.2", "Tom Fitzgerald", DeliverableStatus.tbd),
-        ("D-006", "100% Design Drawings", DeliverableType.drawing_package, "3.2", "Tom Fitzgerald", DeliverableStatus.tbd),
-        ("D-007", "Specifications & Special Provisions", DeliverableType.specification, "8", "Sarah Chen", DeliverableStatus.tbd),
-        ("D-008", "Contract Documents & Tender Package", DeliverableType.other, "8", "Sarah Chen", DeliverableStatus.tbd),
-    ]
-    for ref, title, dtype, wbs_code, resp, status in deliverable_data:
-        db.add(Deliverable(
-            proposal_id=proposal_id,
-            wbs_id=wbs_ids.get(wbs_code),
-            deliverable_ref=ref,
-            title=title,
-            type=dtype,
-            responsible_party=resp,
-            status=status,
-        ))
+    # --- Deliverables ---
+    # Not pre-seeded — use the "Fetch from RFP" agent button on the Deliverables tab
 
     # --- Scope Sections (3 sections) ---
     scope_data = [

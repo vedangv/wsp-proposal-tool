@@ -329,8 +329,7 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
                   <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-20">Ref</th>
                   <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Title</th>
                   <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Type</th>
-                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Due</th>
-                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted w-24">Status</th>
+                  <th className="py-1.5 font-display text-xs tracking-wider text-wsp-muted">Responsible</th>
                 </tr>
               </thead>
               <tbody>
@@ -339,8 +338,7 @@ function SummaryContent({ proposalId }: { proposalId: string }) {
                     <td className="py-1 font-mono text-wsp-red text-xs">{d.deliverable_ref || "—"}</td>
                     <td className="py-1 text-wsp-dark">{d.title}</td>
                     <td className="py-1 text-wsp-muted text-xs">{d.type}</td>
-                    <td className="py-1 font-mono text-xs text-wsp-muted">{d.due_date || "—"}</td>
-                    <td className="py-1 text-xs text-wsp-muted">{d.status}</td>
+                    <td className="py-1 text-wsp-muted text-xs">{d.responsible_party || "—"}</td>
                   </tr>
                 ))}
               </tbody>

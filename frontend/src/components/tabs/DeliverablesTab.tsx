@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { deliverablesApi, type Deliverable, type DeliverableType, type DeliverableStatus } from "../../api/deliverables";
+import { deliverablesApi, type Deliverable, type DeliverableType } from "../../api/deliverables";
 import { wbsApi, type WBSItem } from "../../api/wbs";
+import { agentsApi, type DeliverableResult } from "../../api/agents";
 import SlideOver from "../SlideOver";
 
 interface Props { proposalId: string; }
@@ -10,24 +11,16 @@ const TYPE_LABELS: Record<DeliverableType, string> = {
   report: "Report", model: "Model", specification: "Spec", drawing_package: "Drawings", other: "Other",
 };
 
-const STATUS_STYLES: Record<DeliverableStatus, string> = {
-  tbd: "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
-  in_progress: "bg-blue-50 text-blue-700 border border-blue-200",
-  complete: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-};
-
-const STATUS_LABELS: Record<DeliverableStatus, string> = {
-  tbd: "TBD", in_progress: "In Progress", complete: "Complete",
-};
-
 const DELIVERABLE_TYPES: DeliverableType[] = ["report", "model", "specification", "drawing_package", "other"];
-const STATUSES: DeliverableStatus[] = ["tbd", "in_progress", "complete"];
 
 export default function DeliverablesTab({ proposalId }: Props) {
   const qc = useQueryClient();
   const [slideOpen, setSlideOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Deliverable | null>(null);
   const [formValues, setFormValues] = useState<Partial<Deliverable>>({});
+  const [fetching, setFetching] = useState(false);
+  const [fetchResults, setFetchResults] = useState<DeliverableResult[] | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: deliverables = [], isLoading } = useQuery({
     queryKey: ["deliverables", proposalId],
@@ -61,9 +54,51 @@ export default function DeliverablesTab({ proposalId }: Props) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["deliverables", proposalId] }),
   });
 
+  const startFetch = useCallback(async () => {
+    setFetching(true);
+    setFetchResults(null);
+    try {
+      const { job_id } = await agentsApi.startDeliverablesFetch(proposalId);
+      pollRef.current = setInterval(async () => {
+        try {
+          const job = await agentsApi.pollJob(job_id);
+          if (job.status === "complete" && job.result) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setFetchResults(job.result as unknown as DeliverableResult[]);
+            setFetching(false);
+          } else if (job.status === "error") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setFetching(false);
+          }
+        } catch {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setFetching(false);
+        }
+      }, 1000);
+    } catch {
+      setFetching(false);
+    }
+  }, [proposalId]);
+
+  const acceptResult = async (r: DeliverableResult) => {
+    await deliverablesApi.create(proposalId, {
+      deliverable_ref: r.deliverable_ref,
+      title: r.title,
+      type: r.type as DeliverableType,
+      description: r.description,
+      responsible_party: r.responsible_party,
+    });
+    qc.invalidateQueries({ queryKey: ["deliverables", proposalId] });
+    setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
+  const dismissResult = (r: DeliverableResult) => {
+    setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
   const openAdd = () => {
     setEditingItem(null);
-    setFormValues({ title: "", type: "other", status: "tbd", deliverable_ref: "", responsible_party: "", due_date: "" });
+    setFormValues({ title: "", type: "other", deliverable_ref: "", responsible_party: "", description: "" });
     setSlideOpen(true);
   };
 
@@ -74,9 +109,8 @@ export default function DeliverablesTab({ proposalId }: Props) {
       deliverable_ref: d.deliverable_ref || "",
       title: d.title,
       type: d.type,
-      due_date: d.due_date || "",
+      description: d.description || "",
       responsible_party: d.responsible_party || "",
-      status: d.status,
     });
     setSlideOpen(true);
   };
@@ -98,9 +132,77 @@ export default function DeliverablesTab({ proposalId }: Props) {
   return (
     <div>
       <div className="flex items-end justify-between mb-5">
-        <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Deliverables</h3>
-        <button onClick={openAdd} className="wsp-btn-primary">+ Add Deliverable</button>
+        <div>
+          <h3 className="font-display font-semibold text-wsp-dark text-base tracking-tight">Deliverables</h3>
+          <p className="text-xs text-wsp-muted font-body mt-0.5">
+            Required deliverables extracted from the RFP
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={startFetch}
+            disabled={fetching}
+            className="px-4 py-2 text-xs font-display tracking-wide rounded border
+              bg-purple-600 text-white border-purple-600 hover:bg-purple-700
+              disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {fetching && (
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {fetching ? "Analyzing RFP..." : "Fetch from RFP"}
+          </button>
+          <button onClick={openAdd} className="wsp-btn-primary">+ Add Deliverable</button>
+        </div>
       </div>
+
+      {/* Agent fetch results */}
+      {fetchResults && fetchResults.length > 0 && (
+        <div className="mb-5 space-y-3">
+          <h4 className="text-xs font-display tracking-widest uppercase text-purple-600 font-semibold">
+            AI Suggestions — Review & Accept
+          </h4>
+          {fetchResults.map((r, i) => (
+            <div key={i} className="wsp-card border-purple-200 border-l-4 border-l-purple-500">
+              <div className="p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <span className="font-mono text-wsp-red text-xs">{r.deliverable_ref}</span>
+                      <span className="font-display font-semibold text-wsp-dark text-sm">{r.title}</span>
+                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">
+                        {TYPE_LABELS[r.type as DeliverableType] || r.type}
+                      </span>
+                    </div>
+                    {r.description && (
+                      <p className="text-xs text-purple-700 font-body mt-2 bg-purple-50 p-2 rounded">{r.description}</p>
+                    )}
+                    {r.responsible_party && (
+                      <span className="text-xs text-wsp-muted font-body mt-1 inline-block">Responsible: {r.responsible_party}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => acceptResult(r)}
+                      className="text-xs px-3 py-1.5 border border-green-300 text-green-700 hover:bg-green-50 rounded font-display tracking-wide"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => dismissResult(r)}
+                      className="text-xs px-3 py-1.5 border border-wsp-border text-wsp-muted hover:text-wsp-dark rounded"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="wsp-card overflow-hidden">
         <table className="wsp-table w-full">
@@ -110,9 +212,7 @@ export default function DeliverablesTab({ proposalId }: Props) {
               <th>Title</th>
               <th className="w-28">Type</th>
               <th className="w-28">WBS</th>
-              <th className="w-28">Due</th>
               <th>Responsible</th>
-              <th className="w-28">Status</th>
               <th className="w-24">Drawings</th>
               <th className="w-20"></th>
             </tr>
@@ -128,13 +228,7 @@ export default function DeliverablesTab({ proposalId }: Props) {
                   </span>
                 </td>
                 <td><span className="font-mono text-wsp-red text-xs">{wbsLabel(d.wbs_id)}</span></td>
-                <td className="font-mono text-xs text-wsp-muted">{d.due_date || "—"}</td>
                 <td className="text-wsp-muted">{d.responsible_party || "—"}</td>
-                <td>
-                  <span className={`wsp-badge ${STATUS_STYLES[d.status]} text-[10px]`}>
-                    {STATUS_LABELS[d.status]}
-                  </span>
-                </td>
                 <td><DrawingCount proposalId={proposalId} deliverableId={d.id} /></td>
                 <td>
                   <div className="flex gap-2">
@@ -147,7 +241,7 @@ export default function DeliverablesTab({ proposalId }: Props) {
           </tbody>
         </table>
         {deliverables.length === 0 && !isLoading && (
-          <p className="text-center py-12 text-wsp-muted text-sm font-body">No deliverables yet. Add one to get started.</p>
+          <p className="text-center py-12 text-wsp-muted text-sm font-body">No deliverables yet. Use "Fetch from RFP" to extract deliverables or add one manually.</p>
         )}
       </div>
 
@@ -182,18 +276,12 @@ export default function DeliverablesTab({ proposalId }: Props) {
             </select>
           </div>
           <div>
-            <label className="text-xs text-wsp-muted block mb-1">Due Date</label>
-            <input type="date" className="border rounded px-3 py-2 w-full text-sm" value={formValues.due_date || ""} onChange={e => setFormValues(v => ({ ...v, due_date: e.target.value }))} />
+            <label className="text-xs text-wsp-muted block mb-1">Description</label>
+            <textarea rows={3} className="border rounded px-3 py-2 w-full text-sm resize-none" placeholder="Description of the deliverable..." value={formValues.description || ""} onChange={e => setFormValues(v => ({ ...v, description: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-wsp-muted block mb-1">Responsible Party</label>
             <input className="border rounded px-3 py-2 w-full text-sm" value={formValues.responsible_party || ""} onChange={e => setFormValues(v => ({ ...v, responsible_party: e.target.value }))} />
-          </div>
-          <div>
-            <label className="text-xs text-wsp-muted block mb-1">Status</label>
-            <select className="border rounded px-3 py-2 w-full text-sm" value={formValues.status || "tbd"} onChange={e => setFormValues(v => ({ ...v, status: e.target.value as DeliverableStatus }))}>
-              {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-            </select>
           </div>
           <div className="flex gap-2 pt-4 border-t">
             <button onClick={saveForm} disabled={!formValues.title} className="wsp-btn-primary disabled:opacity-40">
