@@ -54,6 +54,17 @@ export interface RelevantProjectResult {
   relevance_notes: string;
 }
 
+export interface ProjectSearchResult {
+  project_name: string;
+  client: string;
+  contract_value: number;
+  year_completed: string;
+  location: string;
+  wsp_role: string;
+  services_performed: string;
+  relevance_notes: string;
+}
+
 export const agentsApi = {
   startCVFetch: (proposalId: string, names: string[]) =>
     api.post<{ job_id: string; status: string }>("/api/agents/cv-fetch", {
@@ -78,6 +89,11 @@ export const agentsApi = {
 
   startDrawingsFetch: (proposalId: string) =>
     api.post<{ job_id: string; status: string }>("/api/agents/drawings-fetch", {
+      proposal_id: proposalId,
+    }).then(r => r.data),
+
+  startProjectsSearch: (proposalId: string) =>
+    api.post<{ job_id: string; status: string }>("/api/agents/projects-search", {
       proposal_id: proposalId,
     }).then(r => r.data),
 

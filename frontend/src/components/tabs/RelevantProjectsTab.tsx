@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { relevantProjectsApi, type RelevantProject } from "../../api/relevantProjects";
 import { peopleApi, type Person } from "../../api/people";
-import { agentsApi, type RelevantProjectResult } from "../../api/agents";
+import { agentsApi, type RelevantProjectResult, type ProjectSearchResult } from "../../api/agents";
 
 interface Props { proposalId: string; }
 
@@ -19,6 +19,9 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
   const [fetching, setFetching] = useState(false);
   const [fetchResults, setFetchResults] = useState<RelevantProjectResult[] | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [searchFetching, setSearchFetching] = useState(false);
+  const [searchResults, setSearchResults] = useState<ProjectSearchResult[] | null>(null);
+  const searchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startFetch = useCallback(async () => {
     setFetching(true);
@@ -64,6 +67,51 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
 
   const dismissResult = (r: RelevantProjectResult) => {
     setFetchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
+  const startSearch = useCallback(async () => {
+    setSearchFetching(true);
+    setSearchResults(null);
+    try {
+      const { job_id } = await agentsApi.startProjectsSearch(proposalId);
+      searchPollRef.current = setInterval(async () => {
+        try {
+          const job = await agentsApi.pollJob(job_id);
+          if (job.status === "complete" && job.result) {
+            if (searchPollRef.current) clearInterval(searchPollRef.current);
+            setSearchResults(job.result as unknown as ProjectSearchResult[]);
+            setSearchFetching(false);
+          } else if (job.status === "error") {
+            if (searchPollRef.current) clearInterval(searchPollRef.current);
+            setSearchFetching(false);
+          }
+        } catch {
+          if (searchPollRef.current) clearInterval(searchPollRef.current);
+          setSearchFetching(false);
+        }
+      }, 1000);
+    } catch {
+      setSearchFetching(false);
+    }
+  }, [proposalId]);
+
+  const acceptSearchResult = async (r: ProjectSearchResult) => {
+    await relevantProjectsApi.create(proposalId, {
+      project_name: r.project_name,
+      client: r.client,
+      contract_value: r.contract_value,
+      year_completed: r.year_completed,
+      location: r.location,
+      wsp_role: r.wsp_role,
+      services_performed: r.services_performed,
+      relevance_notes: r.relevance_notes,
+    });
+    qc.invalidateQueries({ queryKey: ["relevant-projects", proposalId] });
+    setSearchResults(prev => prev ? prev.filter(x => x !== r) : null);
+  };
+
+  const dismissSearchResult = (r: ProjectSearchResult) => {
+    setSearchResults(prev => prev ? prev.filter(x => x !== r) : null);
   };
 
   const { data: projects = [], isLoading } = useQuery({
@@ -153,13 +201,28 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
             )}
             {fetching ? "Analyzing RFP..." : "Fetch from RFP"}
           </button>
+          <button
+            onClick={startSearch}
+            disabled={searchFetching}
+            className="px-4 py-2 text-xs font-display tracking-wide rounded border
+              bg-purple-600 text-white border-purple-600 hover:bg-purple-700
+              disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {searchFetching && (
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {searchFetching ? "Searching..." : "Search Projects DB"}
+          </button>
           <button onClick={() => createMutation.mutate()} className="wsp-btn-primary">
             + Add Project
           </button>
         </div>
       </div>
 
-      {/* Agent fetch results */}
+      {/* Agent fetch results — from RFP */}
       {fetchResults && fetchResults.length > 0 && (
         <div className="mb-5 space-y-3">
           <h4 className="text-xs font-display tracking-widest uppercase text-purple-600 font-semibold">
@@ -194,6 +257,52 @@ export default function RelevantProjectsTab({ proposalId }: Props) {
                     </button>
                     <button
                       onClick={() => dismissResult(r)}
+                      className="text-xs px-3 py-1.5 border border-wsp-border text-wsp-muted hover:text-wsp-dark rounded"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Projects DB search results */}
+      {searchResults && searchResults.length > 0 && (
+        <div className="mb-5 space-y-3">
+          <h4 className="text-xs font-display tracking-widest uppercase text-purple-600 font-semibold">
+            Projects DB Results — Review & Accept
+          </h4>
+          {searchResults.map((r, i) => (
+            <div key={i} className="wsp-card border-purple-200 border-l-4 border-l-purple-500">
+              <div className="p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <span className="font-display font-semibold text-wsp-dark text-sm">{r.project_name}</span>
+                      <span className="text-xs text-wsp-muted font-body">{r.client}</span>
+                      {r.location && <span className="text-xs text-wsp-muted font-body">· {r.location}</span>}
+                    </div>
+                    <div className="flex items-center gap-4 mt-1">
+                      <span className="text-xs font-mono text-wsp-muted">{r.year_completed}</span>
+                      <span className="text-xs font-mono text-wsp-dark font-semibold">{fmt(r.contract_value)}</span>
+                      <span className="wsp-badge bg-wsp-bg-soft text-wsp-muted border border-wsp-border text-[10px]">{r.wsp_role}</span>
+                    </div>
+                    {r.relevance_notes && (
+                      <p className="text-xs text-purple-700 font-body mt-2 bg-purple-50 p-2 rounded">{r.relevance_notes}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => acceptSearchResult(r)}
+                      className="text-xs px-3 py-1.5 border border-green-300 text-green-700 hover:bg-green-50 rounded font-display tracking-wide"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => dismissSearchResult(r)}
                       className="text-xs px-3 py-1.5 border border-wsp-border text-wsp-muted hover:text-wsp-dark rounded"
                     >
                       Dismiss

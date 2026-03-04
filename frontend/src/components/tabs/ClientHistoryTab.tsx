@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { clientHistoryApi, type OutreachType } from "../../api/client-history";
 import { proposalsApi, type Proposal } from "../../api/proposals";
@@ -32,6 +33,7 @@ const OUTREACH_TYPES: { value: OutreachType; label: string }[] = [
 ];
 
 export default function ClientHistoryTab({ proposalId }: Props) {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -182,6 +184,31 @@ export default function ClientHistoryTab({ proposalId }: Props) {
                         }}
                       />
                     </div>
+
+                    {/* Create Lesson from Debrief button */}
+                    {(p.debrief_notes || p.client_feedback) && (
+                      <div className="pt-1">
+                        <button
+                          onClick={() => {
+                            const params = new URLSearchParams();
+                            params.set("source", "proposal_debrief");
+                            const category = p.status === "won" ? "win_strategy" : p.status === "lost" ? "loss_reason" : "";
+                            if (category) params.set("category", category);
+                            params.set("client", proposal?.client_name || "");
+                            params.set("proposal_id", p.id);
+                            if (p.debrief_notes) params.set("description", p.debrief_notes);
+                            if (p.client_feedback) params.set("recommendation", p.client_feedback);
+                            navigate(`/lessons/new?${params.toString()}`);
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-display tracking-wide text-purple-600 border border-purple-300 rounded px-3 py-1.5 hover:bg-purple-50 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M11 3a1 1 0 10-2 0v1a1 1 0 002 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM4 11a1 1 0 100-2H3a1 1 0 000 2h1zM10 18a1 1 0 001-1v-1a1 1 0 10-2 0v1a1 1 0 001 1zM7 9a3 3 0 116 0 3 3 0 01-6 0z" />
+                          </svg>
+                          Create Lesson from Debrief
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.auth.deps import get_current_user
 from app.models.user import User
-from app.agents import cv_fetcher, rfp_extractor, relevant_projects_fetcher, deliverables_fetcher, drawings_fetcher
+from app.agents import cv_fetcher, rfp_extractor, relevant_projects_fetcher, deliverables_fetcher, drawings_fetcher, projects_search
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -36,6 +36,10 @@ class DeliverablesFetchRequest(BaseModel):
 
 
 class DrawingsFetchRequest(BaseModel):
+    proposal_id: str
+
+
+class ProjectsSearchRequest(BaseModel):
     proposal_id: str
 
 
@@ -118,12 +122,26 @@ async def start_drawings_fetch(
     return {"job_id": job_id, "status": "pending"}
 
 
+@router.post("/projects-search", status_code=202)
+async def start_projects_search(
+    body: ProjectsSearchRequest,
+    _: User = Depends(get_current_user),
+):
+    """
+    Kick off a search of WSP's master project database for relevant projects.
+    Returns job_id immediately; poll /api/agents/jobs/{job_id} for results.
+    """
+    job_id = projects_search.create_job(body.proposal_id)
+    asyncio.get_event_loop().run_in_executor(None, projects_search.run_job, job_id)
+    return {"job_id": job_id, "status": "pending"}
+
+
 @router.get("/jobs/{job_id}", response_model=JobStatusOut)
 async def get_job_status(
     job_id: str,
     _: User = Depends(get_current_user),
 ):
-    job = cv_fetcher.get_job(job_id) or rfp_extractor.get_job(job_id) or relevant_projects_fetcher.get_job(job_id) or deliverables_fetcher.get_job(job_id) or drawings_fetcher.get_job(job_id)
+    job = cv_fetcher.get_job(job_id) or rfp_extractor.get_job(job_id) or relevant_projects_fetcher.get_job(job_id) or deliverables_fetcher.get_job(job_id) or drawings_fetcher.get_job(job_id) or projects_search.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     return JobStatusOut(

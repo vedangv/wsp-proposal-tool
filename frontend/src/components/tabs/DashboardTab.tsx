@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { dashboardApi } from "../../api/dashboard";
 import { proposalsApi } from "../../api/proposals";
+import { lessonsApi } from "../../api/lessons";
 import { disciplinesApi, STANDARD_DISCIPLINES, type Discipline } from "../../api/disciplines";
 import { complianceApi, type ComplianceItem } from "../../api/compliance";
 import SlideOver from "../SlideOver";
@@ -718,6 +719,133 @@ function CountCard({ label, count }: { label: string; count: number }) {
   );
 }
 
+/* ── Lessons for This Client ─────────────────────── */
+
+const LESSON_SOURCE_LABELS: Record<string, string> = {
+  proposal_debrief: "Proposal Debrief",
+  project_delivery: "Project Delivery",
+  technical: "Technical",
+  general: "General",
+};
+
+const LESSON_SOURCE_STYLES: Record<string, string> = {
+  proposal_debrief: "bg-purple-100 text-purple-800",
+  project_delivery: "bg-blue-100 text-blue-800",
+  technical: "bg-teal-100 text-teal-800",
+  general: "bg-gray-100 text-gray-800",
+};
+
+const LESSON_IMPACT_STYLES: Record<string, string> = {
+  high: "bg-red-100 text-red-700",
+  medium: "bg-amber-100 text-amber-700",
+  low: "bg-green-100 text-green-700",
+};
+
+function LessonsForClientSection({ clientName }: { clientName: string | null }) {
+  const navigate = useNavigate();
+
+  const { data: lessons = [], isLoading } = useQuery({
+    queryKey: ["client-lessons", clientName],
+    queryFn: () => lessonsApi.list({ client: clientName! }),
+    enabled: !!clientName,
+  });
+
+  if (!clientName) {
+    return (
+      <div className="mt-6">
+        <h4 className="text-xs font-display tracking-widest uppercase text-wsp-muted mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          Lessons for This Client
+        </h4>
+        <div className="wsp-card p-5">
+          <p className="text-sm text-gray-400 italic text-center">Set a client name to see relevant lessons</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="mt-6">
+        <h4 className="text-xs font-display tracking-widest uppercase text-wsp-muted mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          Lessons for This Client
+        </h4>
+        <p className="text-sm text-wsp-muted text-center py-4">Loading lessons...</p>
+      </div>
+    );
+  }
+
+  const displayed = lessons.slice(0, 5);
+
+  return (
+    <div className="mt-6">
+      <h4 className="text-xs font-display tracking-widest uppercase text-wsp-muted mb-3 flex items-center gap-2">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        Lessons for This Client
+        <span className="text-wsp-muted font-body font-normal text-xs ml-1">({clientName})</span>
+      </h4>
+
+      {displayed.length === 0 ? (
+        <div className="wsp-card p-5">
+          <p className="text-sm text-gray-400 italic text-center">No lessons found for this client</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {displayed.map(lesson => (
+              <div
+                key={lesson.id}
+                className="wsp-card p-4 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/lessons/${lesson.id}`)}
+              >
+                <p className="font-semibold text-sm text-wsp-dark truncate mb-2" title={lesson.title}>
+                  {lesson.title}
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  <span className={`wsp-badge text-[10px] ${LESSON_SOURCE_STYLES[lesson.source] || LESSON_SOURCE_STYLES.general}`}>
+                    {LESSON_SOURCE_LABELS[lesson.source] || lesson.source}
+                  </span>
+                  <span className="wsp-badge text-[10px] bg-gray-100 text-gray-700">
+                    {lesson.category.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                  </span>
+                  <span className={`wsp-badge text-[10px] ${LESSON_IMPACT_STYLES[lesson.impact] || LESSON_IMPACT_STYLES.low}`}>
+                    {lesson.impact.charAt(0).toUpperCase() + lesson.impact.slice(1)}
+                  </span>
+                </div>
+                {lesson.recommendation && (
+                  <p className="text-xs text-wsp-muted line-clamp-2">
+                    {lesson.recommendation.length > 80
+                      ? lesson.recommendation.slice(0, 80) + "..."
+                      : lesson.recommendation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {lessons.length > 5 && (
+            <div className="mt-3 text-right">
+              <Link
+                to={`/lessons?client=${encodeURIComponent(clientName)}`}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                View All {lessons.length} Lessons &rarr;
+              </Link>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Dashboard ──────────────────────────────── */
 
 export default function DashboardTab({ proposalId }: Props) {
@@ -725,6 +853,11 @@ export default function DashboardTab({ proposalId }: Props) {
     queryKey: ["dashboard", proposalId],
     queryFn: () => dashboardApi.get(proposalId),
     refetchInterval: 30000,
+  });
+
+  const { data: proposal } = useQuery({
+    queryKey: ["proposal", proposalId],
+    queryFn: () => proposalsApi.get(proposalId),
   });
 
   if (isLoading || !dash) {
@@ -815,6 +948,9 @@ export default function DashboardTab({ proposalId }: Props) {
         <CountCard label="Scope Sections" count={dash.scope_count} />
         <CountCard label="Relevant Projects" count={dash.relevant_projects_count} />
       </div>
+
+      {/* 7. Lessons for This Client */}
+      <LessonsForClientSection clientName={proposal?.client_name ?? null} />
     </div>
   );
 }
