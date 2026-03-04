@@ -11,6 +11,8 @@ from app.models.relevant_project import RelevantProject
 from app.models.discipline import ProposalDiscipline, DisciplineStatus
 from app.models.compliance import ComplianceItem, ComplianceStatus
 from app.models.client_outreach import ClientOutreach
+from app.models.project import Project
+from app.models.lesson import Lesson
 
 __all__ = [
     "User", "UserRole",
@@ -26,4 +28,6 @@ __all__ = [
     "ProposalDiscipline", "DisciplineStatus",
     "ComplianceItem", "ComplianceStatus",
     "ClientOutreach",
+    "Project",
+    "Lesson",
 ]
