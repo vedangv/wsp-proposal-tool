@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { proposalsApi, type Proposal } from "../api/proposals";
 import { templatesApi, type ProposalTemplate } from "../api/templates";
-import { useAuth } from "../context/AuthContext";
+import AppNav from "../components/AppNav";
 
 const STATUS_STYLES: Record<string, string> = {
   draft:       "bg-wsp-bg-soft text-wsp-muted border border-wsp-border",
@@ -24,7 +24,6 @@ const STATUS_LABELS: Record<string, string> = {
 const ALL_STATUSES = ["draft", "in_review", "submitted", "won", "lost"];
 
 export default function ProposalsPage() {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -71,27 +70,7 @@ export default function ProposalsPage() {
 
   return (
     <div className="min-h-screen bg-wsp-bg-soft">
-      {/* Header */}
-      <header className="bg-wsp-dark border-b border-white/10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <span className="font-display font-bold text-white text-xl tracking-[0.3em] uppercase">WSP</span>
-            <span className="text-white/20 text-lg">|</span>
-            <span className="font-display text-white/70 text-sm tracking-widest uppercase font-medium">
-              Proposal Tool
-            </span>
-          </div>
-          <div className="flex items-center gap-5">
-            <span className="text-white/50 text-sm font-body">{user?.name}</span>
-            <button
-              onClick={logout}
-              className="text-white/40 hover:text-white text-xs font-display tracking-widest uppercase transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppNav />
 
       <main className="max-w-6xl mx-auto py-8 px-6">
         {/* Page title row */}

@@ -8,6 +8,10 @@ import LoginPage from "./pages/LoginPage";
 import ProposalsPage from "./pages/ProposalsPage";
 import ProposalDetailPage from "./pages/ProposalDetailPage";
 import SummaryPage from "./pages/SummaryPage";
+import ProjectsPage from "./pages/ProjectsPage";
+import ProjectDetailPage from "./pages/ProjectDetailPage";
+import LessonsPage from "./pages/LessonsPage";
+import LessonDetailPage from "./pages/LessonDetailPage";
 
 function AppInner() {
   const toastState = useToastState();
@@ -37,6 +41,11 @@ function AppInner() {
               <Route path="/proposals" element={<ProposalsPage />} />
               <Route path="/proposals/:id" element={<ProposalDetailPage />} />
               <Route path="/proposals/:id/summary" element={<SummaryPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/projects/:id" element={<ProjectDetailPage />} />
+              <Route path="/lessons" element={<LessonsPage />} />
+              <Route path="/lessons/new" element={<LessonDetailPage />} />
+              <Route path="/lessons/:id" element={<LessonDetailPage />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </BrowserRouter>
