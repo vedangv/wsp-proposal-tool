@@ -72,13 +72,13 @@ docker-compose up
 All tabs (Pricing Matrix, Schedule, Deliverables, Drawing List) reference WBS items via `wbs_id`. Never create data in other tabs that duplicates WBS — always reference.
 
 ### Proposal is the parent entity
-Every table has a `proposal_id` foreign key. Always scope queries to a proposal. Never return cross-proposal data in a single query.
+Most tables have a `proposal_id` foreign key. Always scope queries to a proposal. Never return cross-proposal data in a single query. Exception: `projects` and `lessons` tables are org-wide (no `proposal_id` FK) and have their own top-level routes under `/api/projects/` and `/api/lessons/`.
 
 ### WebSockets pattern
 Each proposal has a WebSocket room keyed by `proposal_id`. On any field edit, broadcast `{ table, row_id, field, value, updated_by }` to all connected clients in that room. Last-write-wins for conflicts.
 
 ### Agent API namespace
-All agent endpoints live under `/api/agents/`. Agents are async — return a `job_id` immediately, poll `/api/agents/jobs/{job_id}` for status. This pattern must be preserved for all future agents. Current agents: `cv_fetcher`, `rfp_extractor`, `relevant_projects_fetcher`, `deliverables_fetcher`, `drawings_fetcher`.
+All agent endpoints live under `/api/agents/`. Agents are async — return a `job_id` immediately, poll `/api/agents/jobs/{job_id}` for status. This pattern must be preserved for all future agents. Current agents: `cv_fetcher`, `rfp_extractor`, `relevant_projects_fetcher`, `deliverables_fetcher`, `drawings_fetcher`, `projects_search`.
 
 ### No custom formula engine
 Pricing Matrix totals are computed server-side (hours × rate). No client-side formula evaluation. Keep it structured.
@@ -96,6 +96,10 @@ WBS Items (source of truth)
 
 People                 (proposal_id only — no WBS reference)
 Scope Sections         (proposal_id only — rich text)
+
+Org-wide (no proposal_id):
+  Projects             (master registry, linked via relevant_projects.source_project_id)
+  Lessons              (optional project_id FK, optional proposal_id FK)
 ```
 
 ---
@@ -119,6 +123,7 @@ Scope Sections         (proposal_id only — rich text)
 | 13 | Status dropdown (won/lost), full calendar, target fees, evaluation criteria | Done |
 | 14 | Client History tab, demo data (drawings/projects), Fetch from RFP agent, print enhancements | Done |
 | 15 | Deliverables + Drawings agent-driven (Fetch from RFP), remove status/due columns | Done |
+| 16 | Projects DB + Lessons Learnt Register, top-level nav, proposal integration | Done |
 
 ---
 
